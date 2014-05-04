@@ -1,0 +1,35 @@
+<patch>
+	<services>
+		<!--how long will it need wait for after stopping, in seconds-->
+		<waitTime>10</waitTime>
+		<service>
+			<!--the service needs to be stopped before patch by nodemgr, 
+				 and sometimes, you need point out the processes that need to
+				 be checked to make sure the service is stopped or started successfully-->
+			<name>stream_scheduler</name>
+			<!--the process needs be checked-->
+			<process>stream-scheduler</process>
+		</service>
+		<!--sometimes the service is not managed by nodemgr, it needs stop the processes manually,
+			 we use process block to define this-->
+		<process>
+			<name>stream-scheduler</name>
+			<!--stop command, by default, it's kill -9-->
+			<stop>kill</stop>
+			<!--start command, by default, it will try invoke the bin file in /sw/unicorn/bin-->
+			<start></start>
+		</process>
+	</services>
+	<component>
+		<name>stream-scheduler</name>
+		<bins>
+			<!--defSrcDir>/sw/unicorn/bin</defSrcDir-->
+			<!--defDstDir>/sw/unicorn/bin</defDstDir-->
+			<bin>
+				<src>stream-scheduler</src>
+			</bin>
+		</bins>
+		<libs>
+		</libs>
+	</component>
+</patch>
