@@ -15,9 +15,9 @@
 		<process>
 			<name>stream-scheduler</name>
 			<!--stop command, by default, it's kill -9-->
-			<stop>kill</stop>
+			<stop>kill -9 `pidof stream-scheduler`</stop>
 			<!--start command, by default, it will try invoke the bin file in /sw/unicorn/bin-->
-			<start></start>
+			<start>/sw/unicorn/bin/stream-scheduler</start>
 		</process>
 	</services>
 	<component>
@@ -30,6 +30,9 @@
 			</bin>
 		</bins>
 		<libs>
+			<lib>
+				<src>ss.lib</src>
+			</lib>
 		</libs>
 	</component>
 </patch>

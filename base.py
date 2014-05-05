@@ -126,13 +126,13 @@ def raise_virtual( func ):
 def has_attr(node, attrname):
 	return node.hasAttribute( attrname )
 
-def get_attrvalue(node, attrname):
+def get_attr_value(node, attrname):
      return node.getAttribute(attrname).encode('utf-8','ignore')
 
-def get_nodevalue(node, index = 0):
+def get_node_value(node, index = 0):
     return node.childNodes[index].nodeValue.encode('utf-8','ignore')
 
-def get_xmlnode(node, name):
+def get_xml_node(node, name):
     return node.getElementsByTagName(name)
 
 class BaseObject( object ):

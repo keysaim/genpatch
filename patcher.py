@@ -188,6 +188,7 @@ class ServiceBlock( BaseObject ):
 		for (service, isSer) in self.services:
 			if service.init_config(self):
 				slist.append( (service, isSer) )
+				logging.debug( 'inited one service:'+str(service) )
 			else:
 				logging.error( 'invalid service'+str(service) )
 
@@ -223,8 +224,8 @@ class Binary( BaseObject ):
 
 class BinBlock( BaseObject ):
 	def __init__( self, parent, defSrcDir=None, defDstDir=None ):
-		self.defSrcDir = None
-		self.defDstDir = None
+		self.defSrcDir = defSrcDir
+		self.defDstDir = defDstDir
 		self.binList = list()
 
 	def add_binary( self, binary ):
@@ -240,7 +241,7 @@ class BinBlock( BaseObject ):
 		for binary in self.binList:
 			self.__init_bin( bmap, binary )
 
-		self.binList = bmap.keys()
+		self.binList = bmap.values()
 		if not self.binList or len(self.binList) == 0:
 			logging.error( 'no available binary set in this block:'+str(self) )
 			return False
@@ -260,11 +261,12 @@ class BinBlock( BaseObject ):
 		if os.path.exists( src ):
 			if os.path.isfile(src):
 				bname = os.path.basename( src )
-				if os.path.isdir(dst):
+				if not os.path.isfile(dst):
 					dst = os.path.join( dst, bname )
 				binary.src = src
 				binary.dst = dst
 				bmap[dst] = binary
+				logging.debug( 'inited one binary:'+str(binary) )
 			else:
 				#include many files here
 				for fname in os.listdir(src):
@@ -273,13 +275,14 @@ class BinBlock( BaseObject ):
 						continue
 					
 					cdst = dst
-					if os.path.isdir(cdst):
+					if not os.path.isfile(cdst):
 						cdst = os.path.join( cdst, fname )
 
 					subBin = Binary( binary.parent )
 					subBin.src = fpath
 					subBin.dst = cdst
 					bmap[cdst] = subBin
+					logging.debug( 'inited one sub binary:'+str(subBin) )
 
 		#if not set the source files, it means only set the source name
 		#try to get the source file from the default directory
@@ -288,11 +291,12 @@ class BinBlock( BaseObject ):
 			if not os.path.exists( src ):
 				logging.error( 'source file not exist:'+src )
 				return False
-			if os.path.isdir(dst):
+			if not os.path.isfile(dst):
 				dst = os.path.join( dst, bname )
 			binary.src = src
 			binary.dst = dst
 			bmap[dst] = binary
+			logging.debug( 'inited one binary:'+str(binary) )
 
 		return True
 
@@ -354,6 +358,7 @@ class Component( BaseObject ):
 
 		self.deviceMode = None
 		self.compDir = None
+		self.orgCompDir = None
 		self.md5File = None
 		self.scriptName = None
 
@@ -366,16 +371,22 @@ class Component( BaseObject ):
 			if not self.serviceBlock.init_config( self ):
 				logging.error( 'init service block failed:'+str(self.serviceBlock) )
 				self.serviceBlock = None
+			else:
+				logging.debug( 'inited one service block:'+str(self.serviceBlock) )
 
 		if self.binBlock:
 			if not self.binBlock.init_config( self ):
 				logging.error( 'init binary block failed:'+str(self.binBlock) )
 				self.binBlock = None
+			else:
+				logging.debug( 'inited one bin block:'+str(self.binBlock) )
 
 		if self.libBlock:
 			if not self.libBlock.init_config( self ):
 				logging.error( 'init library block failed:'+str(self.libBlock) )
 				self.libBlock = None
+			else:
+				logging.debug( 'inited one lib block:'+str(self.libBlock) )
 
 		if not self.binBlock and not self.libBlock:
 			logging.error( 'no available binary file in this component:'+str(self) )
@@ -383,16 +394,19 @@ class Component( BaseObject ):
 
 		return True
 
-	def generate( self, pdir ):
+	def generate( self, pdir, orgPdir ):
+		logging.info( 'gen in component:'+str(self) )
 		self.compDir = os.path.join( pdir, self.name )
+		self.orgCompDir = os.path.join( orgPdir, self.name )
 		if not mkdir(self.compDir):
 			logging.error( 'create component directory failed:'+str(self) )
 			return False
 		srcDir = os.path.join( self.compDir, 'src' )
+		orgSrcDir = 'src'
 		if not mkdir(srcDir):
 			logging.error( 'create component src directory failed:'+str(self) )
 			return False
-		self.__copy_source_files( srcDir )
+		self.__copy_source_files( srcDir, orgSrcDir )
 		self.__gen_md5sum_file( srcDir )
 
 		self.scriptName = self.name + '.sh'
@@ -400,9 +414,13 @@ class Component( BaseObject ):
 		fout = open( spath, 'w' )
 
 		self.__gen_head( fout )
+		fout.write( '\n' )
 		self.__gen_apply_func( fout )
+		fout.write( '\n' )
 		self.__gen_revert_func( fout )
+		fout.write( '\n' )
 		self.__gen_verify_func( fout )
+		fout.write( '\n' )
 
 		lines  = 'case "$1" in\n'
 		lines += '	apply)\n'
@@ -420,22 +438,24 @@ class Component( BaseObject ):
 		fout.write( lines )
 
 		fout.close()
+		return True
 
 	def __gen_head( self, fout ):
 		lines  = '#!/bin/sh\n'
 		lines += '# patch for ' + self.name + '\n\n'
 		lines += 'component="' + self.name + '"\n'
-		lines += 'md5sum_file="' + self.md5File + '\n\n'
+		lines += 'md5sum_file="' + self.md5File + '"\n\n'
+		lines += 'cd ' + self.orgCompDir + '\n\n'
 
 		fout.write( lines )
 
-		offset = 0
+		offset = 1
 		if self.binBlock:
 			offset += self.binBlock.gen_file_vars( fout, '', offset )
 		if self.libBlock:
 			offset += self.libBlock.gen_file_vars( fout, '', offset )
 
-		lines  = 'total_files=' + str(offset) + '\n'
+		lines  = 'total_files=' + str(offset-1) + '\n'
 		fout.write( lines )
 
 	def __gen_apply_func( self, fout ):
@@ -488,6 +508,7 @@ class Component( BaseObject ):
 		lines += '	echo "#########################################################"\n'
 		lines += '	echo "# Verifying $component..."\n\n'
 
+		lhead  = '\t'
 		lines += lhead + 'local installed=1\n'
 		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
 		lines += lhead + 'do\n'
@@ -529,9 +550,9 @@ class Component( BaseObject ):
 		lines += lhead + 'done\n\n'
 		lines += lhead + '# check if all files were installed\n'
 		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
-		lines += lhead + '	echo "sanity check: patch not installed\n'	
+		lines += lhead + '	echo "sanity check: patch not installed"\n'	
 		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
-		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files), please revert the patch and try again!\n'
+		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files), please revert the patch and try again!"\n'
 		lines += lhead + '	return 22\n'
 		lines += lhead + 'else\n'
 		lines += lhead + '	echo "patch already exists, aborting."\n'
@@ -553,10 +574,10 @@ class Component( BaseObject ):
 		lines += lhead + 'done\n\n'
 		lines += lhead + '# check if all files were installed\n'
 		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
-		lines += lhead + '	echo "sanity check: patch not installed, aborting.\n'
+		lines += lhead + '	echo "sanity check: patch not installed, aborting."\n'
 		lines += lhead + '	return 31\n'
 		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
-		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files)\n'
+		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files)"\n'
 		lines += lhead + 'else\n'
 		lines += lhead + '	echo "sanity check: patch installed."\n'
 		lines += lhead + 'fi\n\n'
@@ -631,15 +652,19 @@ class Component( BaseObject ):
 		lines += lhead + 'sleep 10\n'
 		fout.write( lines )
 
-	def __copy_source_files( self, srcDir ):
+	def __copy_source_files( self, srcDir, orgSrcDir ):
 		try:
 			if self.binBlock:
 				for bnry in self.binBlock.binList:
 					shutil.copy( bnry.src, srcDir )
+					nsrc = os.path.join( orgSrcDir, os.path.basename(bnry.src) )
+					bnry.src = nsrc
 
 			if self.libBlock:
 				for lib in self.libBlock.binList:
 					shutil.copy( lib.src, srcDir )
+					nsrc = os.path.join( orgSrcDir, os.path.basename(lib.src) )
+					lib.src = nsrc
 
 			return True
 		except:
@@ -647,7 +672,9 @@ class Component( BaseObject ):
 
 	def __gen_md5sum_file( self, srcDir ):
 		self.md5File = 'sum.md5'
-		cmd = 'md5sum ' + srcDir + '/* > ' + self.md5File
+		cmd  = 'cd ' + self.compDir
+		cmd += ';md5sum ' + 'src/* > ' + self.md5File
+		logging.debug( 'run cmd:'+cmd )
 		os.system( cmd )
 
 
@@ -657,6 +684,8 @@ class Patcher( BaseObject ):
 		self.version = ''
 		self.bugs = ''
 		self.timeTag = None
+		self.outDir = './'
+
 		self.packageDir = None
 		self.serviceBlock = None
 		self.compList = list()
@@ -669,11 +698,14 @@ class Patcher( BaseObject ):
 			if not self.serviceBlock.init_config( self ):
 				logging.error( 'init service block failed:'+str(self.serviceBlock) )
 				self.serviceBlock = None
+			else:
+				logging.debug( 'inited one service block:'+str(self.serviceBlock) )
 
 		clist = list()
 		for comp in self.compList:
 			if comp.init_config( self ):
 				clist.append( comp )
+				logging.debug( 'inited one component:'+str(comp) )
 			else:
 				logging.error( 'invalid component:'+str(comp) )
 
@@ -681,13 +713,18 @@ class Patcher( BaseObject ):
 		return len(self.compList) > 0
 
 	def generate( self ):
+		logging.info( 'patch obj:'+str(self) )
+		logging.info( '\nbegin to generate patch...\n\n' )
 		if not self.timeTag:
 			now = datetime.now()
-			self.timeTag = str_time( now, '%Y/%m/%d' )
-
+			self.timeTag = str_time( now, '%Y%m%d' )
+		
+		mkdir( self.outDir )
 		if not self.packageDir:
-			self.packageDir = 'patch_package_' + self.version + '_' + self.timeTag
+			self.packageDirName = 'patch_package_' + self.version + '_' + self.timeTag
+			self.packageDir = os.path.join( self.outDir, self.packageDirName )
 
+		logging.debug( 'make directory:'+self.packageDir )
 		if not mkdir(self.packageDir):
 			logging.fatal( 'create package directory failed:'+str(self) )
 			return False
@@ -699,7 +736,7 @@ class Patcher( BaseObject ):
 	def __gen_comps( self ):
 		if self.compList:
 			for comp in self.compList:
-				if not comp.generate( self.packageDir ):
+				if not comp.generate( self.packageDir, self.packageDirName ):
 					logging.error( 'generate failed on compent:'+str(comp) )
 					return False
 
@@ -707,15 +744,23 @@ class Patcher( BaseObject ):
 
 	def __gen_main_script( self ):
 		scriptName = 'cdsis_' + self.version + '_patch_' + self.timeTag + '.sh.sign'
-		fout = open( scriptName, 'w' )
+		spath = os.path.join( self.outDir, scriptName )
+		fout = open( spath, 'w' )
 
 		self.__gen_head( fout )
+		fout.write( '\n' )
 		self.__gen_uncompress_func( fout )
+		fout.write( '\n' )
 		self.__gen_validate_func( fout )
+		fout.write( '\n' )
 		self.__gen_apply_func( fout )
+		fout.write( '\n' )
 		self.__gen_revert_func( fout )
+		fout.write( '\n' )
 		self.__gen_verify_func( fout )
+		fout.write( '\n' )
 		self.__gen_clean_func( fout )
+		fout.write( '\n' )
 
 		lines  = 'case "$1" in\n'
 		lines += '		apply)\n'
@@ -744,7 +789,7 @@ class Patcher( BaseObject ):
 		lines += 'customer="Telstra"\n'
 		lines += 'target_version="3.1.2b60" # major(.)minor(.)maintenance(b)build\n'
 		lines += 'version_tag="vds-is $target_version(For $customer)"\n'
-		lines += 'time_tag="20140226"\n'
+		lines += 'time_tag="' + self.timeTag + '"\n'
 		lines += '\n'
 		lines += 'package_name="patch_package_${target_version}_${time_tag}"\n'
 		lines += 'package_file="./$package_name.tar.gz"\n\n'
@@ -753,19 +798,22 @@ class Patcher( BaseObject ):
 		for comp in self.compList:
 			idx += 1
 			spath = os.path.join( comp.compDir, comp.scriptName )
+			opath = os.path.join( comp.orgCompDir, comp.scriptName )
 			cmd = 'md5sum ' + spath
+			logging.debug( 'popen cmd:'+cmd )
 			fin = os.popen( cmd, 'r' )
 			md5sum = ''
 			for line in fin:
+				logging.debug( line )
 				segs = line.split()
-				md5sum = segs[-1]
+				md5sum = segs[0]
 				break
 			fin.close()
 
-			lines += 'script_file' + str(idx) + '="' + spath + '"\n'
+			lines += 'script_file' + str(idx) + '="' + opath + '"\n'
 			lines += 'script_md5sum' + str(idx) + '="' + md5sum + '"\n'
 
-		lines += 'sleep_time=10\n\n'
+		lines += '\n\n'
 		fout.write( lines )
 			
 	def __gen_uncompress_func( self, fout ):
@@ -811,7 +859,7 @@ class Patcher( BaseObject ):
 		lines += '	echo "## Patch for $version_tag"\n'
 		lines += '	echo "############################################################"\n'
 		lines += '	\n'
-		lines += '	cds_version=$(/ruby/bin/exec -c "show version" | grep "Content Delivery System Software Release" | awk '{ print $6$8 }')\n'
+		lines += '	cds_version=$(/ruby/bin/exec -c "show version" | grep "Content Delivery System Software Release" | awk \'{ print $6$8 }\')\n'
 		lines += '	if [[ "$cds_version" = "$target_version" ]]; then\n'
 		lines += '		echo "Current cds-is version $cds_version"\n'
 		lines += '	else\n'

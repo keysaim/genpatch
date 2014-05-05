@@ -1,6 +1,7 @@
 import logging
 
 from base import *
+from patcher import *
 
 
 class ConfigParser( BaseObject ):
@@ -9,9 +10,10 @@ class ConfigParser( BaseObject ):
 
 	def parse_config( self, configFile ):
 		patcherList = list()
-		doc = minidom.parse( xmlfile )
+		doc = minidom.parse( configFile )
 		root = doc.documentElement
-		for cnode in root.childNodes:
+		if root:
+			cnode = root
 			name = cnode.nodeName
 			if name == 'patch':
 				patcher = self.__parse_patch( cnode )
@@ -21,14 +23,17 @@ class ConfigParser( BaseObject ):
 		return patcherList
 
 	def __parse_patch( self, node ):
+		logging.debug( 'parse patch element...' )
 		patcher = Patcher()
 		for cnode in node.childNodes:
 			name = cnode.nodeName
 			if name == 'services':
 				patcher.serviceBlock = self.__parse_services( cnode )
+				logging.debug( 'one service block parsed:'+str(patcher.serviceBlock) )
 			elif name == 'component':
-				comp = self.__parse_component( cnode )
-				patcher.
+				comp = self.__parse_component( cnode, node )
+				logging.debug( 'one component parsed:'+str(comp) )
+				patcher.add_component( comp )
 
 		return patcher
 
@@ -66,6 +71,7 @@ class ConfigParser( BaseObject ):
 				process = get_node_value( cnode )
 				service.add_process( process )
 
+		logging.debug( 'parsed one service:'+str(service) )
 		return service
 
 	def __parse_process( self, node, parent ):
@@ -80,6 +86,7 @@ class ConfigParser( BaseObject ):
 			elif name == 'stop':
 				process.stopCmd = get_node_value( cnode )
 
+		logging.debug( 'parsed one process:'+str(process) )
 		return process
 
 	def __parse_component( self, node, parent ):
@@ -87,13 +94,16 @@ class ConfigParser( BaseObject ):
 
 		for cnode in node.childNodes:
 			name = cnode.nodeName
-			if name == 'bins':
-				self.__parse_bins( cnode, comp )
+			if name == 'name':
+				comp.name = get_node_value( cnode )
+			elif name == 'bins':
+				comp.binBlock = self.__parse_bins( cnode, comp )
 			elif name == 'libs':
-				self.__parse_libs( cnode, comp )
+				comp.libBlock = self.__parse_libs( cnode, comp )
 			elif name == 'services':
-				self.serviceBlock = self.__parse_services( self, comp )
-
+				comp.serviceBlock = self.__parse_services( self, comp )
+		
+		logging.debug( 'parsed one component:'+str(comp) )
 		return comp
 
 	def __parse_bins( self, node, parent ):
@@ -112,6 +122,7 @@ class ConfigParser( BaseObject ):
 				binary = self.__parse_binary( cnode, bblock )
 				bblock.add_binary( binary )
 
+		logging.debug( 'parsed one binary block:'+str(bblock) )
 		return bblock
 
 	def __parse_binary( self, node, parent ):
@@ -124,6 +135,7 @@ class ConfigParser( BaseObject ):
 			elif name == 'dst':
 				binary.dst = get_node_value( cnode )
 
+		logging.debug( 'parsed one binary:'+str(binary) )
 		return binary
 
 	def __parse_libs( self, node, parent ):
@@ -142,6 +154,7 @@ class ConfigParser( BaseObject ):
 				library = self.__parse_binary( cnode, lblock )
 				lblock.add_binary( library )
 
+		logging.debug( 'parsed one library block:'+str(lblock) )
 		return lblock
 
 	def __parse_library( self, node, parent ):
@@ -154,6 +167,7 @@ class ConfigParser( BaseObject ):
 			elif name == 'dst':
 				lib.dst = get_node_value( cnode )
 
+		logging.debug( 'parsed one library:'+str(lib) )
 		return lib
 
 		
