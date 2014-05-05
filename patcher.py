@@ -1,38 +1,55 @@
 import logging
 import os
+import shutil
 
 from base import *
 
 
 
-class Patcher( BaseObject ):
-	def __init__( self ):
-		self.serviceBlock = None
-		self.compList = list()
+def __gen_stop_service_func( self, fout ):
+	lines = 'function stop_service(){\n'
+	lines += '	##### check and stop\n'
+	lines += '	local tarsvc="$1"\n'
+	lines += '	local tarproc="$2"\n'
+	lines += '	local stime=$3\n'
+	lines += '	echo "stopping service $tarsvc..."\n'
+	lines += '	/ruby/bin/nodemgr_clt stop $tarsvc\n'
+	lines += '	sleep $stime\n\n'
+	lines += '	pidof $tarproc > /dev/null\n'
+	lines += '	pidof_rc=$?\n'
+	lines += '	if [ $pidof_rc -eq 0 ]; then\n'
+	lines += '		echo "ERROR: process $tarproc not stopped"\n'
+	lines += '		echo "please check the $tarproc process and retry the patch later."\n'
+	lines += '		echo "exit 25"\n'
+	lines += '	else\n'
+	lines += '		echo "process stopped, go on..."\n'
+	lines += '	fi\n'
+	lines += '}\n'
 
-	def add_component( self, comp ):
-		self.compList.append( comp )
+	fout.write( lines )
 
-	def init( self ):
-		if self.serviceBlock:
-			slist = list()
-			for service in self.serviceBlock:
-				if service.init( self ):
-					slist.append( service)
-				else:
-					logging.error( 'invalid service:'+str(service) )
 
-			self.serviceBlock = slist
+def __gen_start_service_func( self, fout ):
+	lines = 'function start_service(){\n'
+	lines += '	##### check and start\n'
+	lines += '	local tarsvc="$1"\n'
+	lines += '	local tarproc="$2"\n'
+	lines += '	local stime=$3\n'
+	lines += '	echo "starting service $tarsvc..."\n'
+	lines += '	/ruby/bin/nodemgr_clt start $tarsvc\n'
+	lines += '	sleep $stime\n\n'
+	lines += '	pidof $tarproc > /dev/null\n'
+	lines += '	pidof_rc=$?\n'
+	lines += '	if [ $pidof_rc -eq 0 ]; then\n'
+	lines += '		echo "process restarted, patching succeeded on this."\n'
+	lines += '	else\n'
+	lines += '		echo "ERROR: process $tarproc restarting failed"\n'
+	lines += '		echo "please revert the patch and check the $tarproc process"\n'
+	lines += '		echo "exit 26"\n'
+	lines += '	fi\n'
+	lines += '}\n'
 
-		clist = list()
-		for comp in self.compList:
-			if comp.init( self ):
-				clist.append( comp )
-			else:
-				logging.error( 'invalid component:'+str(comp) )
-
-		self.compList = clist
-		return len(self.compList) > 0
+	fout.write( lines )
 
 
 class Service( BaseObject ):
@@ -47,12 +64,54 @@ class Service( BaseObject ):
 
 		self.processList.append( process )
 
-	def init( parent ):
+	def init_config( self, parent ):
 		if self.name is None:
 			logging.error( 'servie name not set' )
 			return False
 
 		return True
+
+	def gen_start( self, fout, lhead ):
+		lines  = lhead + '/ruby/bin/nodemgr_clt start ' + self.name + '\n'
+		fout.write( lines )
+
+	def gen_stop( self, fout, lhead ):
+		lines  = lhead + '/ruby/bin/nodemgr_clt stop ' + self.name + '\n'
+		fout.write( lines )
+
+	def gen_check_started( self, fout, lhead ):
+		if not self.processList:
+			return
+		lines = ''
+		for proc in self.processList:
+			lines += lhead + 'local tarproc=' + proc + '\n'
+			lines += lhead + 'pidof $tarproc > /dev/null\n'
+			lines += lhead + 'local pidof_rc=$?\n'
+			lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
+			lines += lhead + '	echo "Process started, go on..."\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "ERROR: $tarsvc retarting failed in service:' + self.name + '"\n'
+        	lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
+			lines += lhead + '	exit 26\n'
+			lines += lhead + 'fi\n'
+		fout.write( lines )
+
+	def gen_check_stopped( self, fout, lhead ):
+		if not self.processList:
+			return
+		lines = ''
+		for proc in self.processList:
+			lines += lhead + 'local tarproc=' + proc + '\n'
+			lines += lhead + 'pidof $tarproc > /dev/null\n'
+			lines += lhead + 'local pidof_rc=$?\n'
+			lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
+			lines += lhead + '	echo "ERROR: process $tarproc not stopped in service:' + self.name + '"\n'
+			lines += lhead + '	echo "Please check the $tarproc process and retry the patch later."\n'
+			lines += lhead + '	exit 25\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "Process stopped, go on..."\n'
+			lines += lhead + 'fi\n'
+		fout.write( lines )
 
 
 class Process( BaseObject ):
@@ -61,7 +120,7 @@ class Process( BaseObject ):
 		self.startCmd = None
 		self.stopCmd = None
 
-	def init( self, parent ):
+	def init_config( self, parent ):
 		if self.name is None:
 			logging.error( 'process name not set' )
 			return False
@@ -71,9 +130,44 @@ class Process( BaseObject ):
 			return False
 
 		if self.stopCmd is None:
-			self.stopCmd = 'kill -9'
+			self.stopCmd = 'kill -9 ' + self.name
 
 		return True
+
+	def gen_start( self, fout, lhead ):
+		lines  = lhead + self.startCmd + '\n'
+		fout.write( lines )
+
+	def gen_stop( self, fout, lhead ):
+		lines  = lhead + self.stopCmd + '\n'
+		fout.write( lines )
+
+	def gen_check_started( self, fout, lhead ):
+		lines  = lhead + 'local tarproc=' + self.name + '\n'
+		lines += lhead + 'pidof $tarproc > /dev/null\n'
+		lines += lhead + 'local pidof_rc=$?\n'
+		lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
+		lines += lhead + '	echo "Process started, go on..."\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "ERROR: $tarsvc retarting failed "\n'
+        lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
+		lines += lhead + '	exit 26\n'
+		lines += lhead + 'fi\n'
+		fout.write( lines )
+
+	def gen_check_stopped( self, fout, lhead ):
+		lines  = lhead + 'local tarproc=' + self.name + '\n'
+		lines += lhead + 'pidof $tarproc > /dev/null\n'
+		lines += lhead + 'local pidof_rc=$?\n'
+		lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
+		lines += lhead + '	echo "ERROR: process $tarproc not stopped "\n'
+		lines += lhead + '	echo "Please check the $tarproc process and retry the patch later."\n'
+		lines += lhead + '	exit 25\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "Process stopped, go on..."\n'
+		lines += lhead + 'fi\n'
+		fout.write( lines )
+
 
 class ServiceBlock( BaseObject ):
 	def __init__( self ):
@@ -89,16 +183,36 @@ class ServiceBlock( BaseObject ):
 	def add_process( self, process ):
 		self.services.append( (process, False) )
 
-	def init( self, parent ):
+	def init_config( self, parent ):
 		slist = list()
 		for (service, isSer) in self.services:
-			if service.init(self):
+			if service.init_config(self):
 				slist.append( (service, isSer) )
 			else:
 				logging.error( 'invalid service'+str(service) )
 
 		self.services = slist
 		return len(self.services) > 0
+
+	def gen_start( self, fout, lhead ):
+		for (service, isSer) in self.services:
+			service.gen_start( fout, lhead )
+
+		lines = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		fout.write( lines )
+
+		for (service, isSer) in self.services:
+			service.gen_check_started( fout, lhead )
+	
+	def gen_stop( self, fout, lhead ):
+		for (service, isSer) in self.services:
+			service.gen_stop( fout, lhead )
+
+		lines = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		fout.write( lines )
+
+		for (service, isSer) in self.services:
+			service.gen_stop( fout, lhead )
 
 
 class Binary( BaseObject ):
@@ -108,7 +222,7 @@ class Binary( BaseObject ):
 
 
 class BinBlock( BaseObject ):
-	def __init__( self, parent ):
+	def __init__( self, parent, defSrcDir=None, defDstDir=None ):
 		self.defSrcDir = None
 		self.defDstDir = None
 		self.binList = list()
@@ -116,7 +230,7 @@ class BinBlock( BaseObject ):
 	def add_binary( self, binary ):
 		self.binList.append( binary )
 
-	def init( self, parent ):
+	def init_config( self, parent ):
 		if self.defSrcDir is None:
 			self.defSrcDir = '/sw/unicorn/bin'
 		if self.defDstDir is None:
@@ -124,7 +238,14 @@ class BinBlock( BaseObject ):
 
 		bmap = dict()
 		for binary in self.binList:
-			pass
+			self.__init_bin( bmap, binary )
+
+		self.binList = bmap.keys()
+		if not self.binList or len(self.binList) == 0:
+			logging.error( 'no available binary set in this block:'+str(self) )
+			return False
+
+		return True
 
 	def __init_bin( self, bmap, binary ):
 		src = binary.src
@@ -135,6 +256,7 @@ class BinBlock( BaseObject ):
 		if dst is None:
 			dst = self.defDstDir
 
+		#if indicate the source files
 		if os.path.exists( src ):
 			if os.path.isfile(src):
 				bname = os.path.basename( src )
@@ -152,24 +274,75 @@ class BinBlock( BaseObject ):
 					
 					cdst = dst
 					if os.path.isdir(cdst):
+						cdst = os.path.join( cdst, fname )
 
-		else:
-			pass
+					subBin = Binary( binary.parent )
+					subBin.src = fpath
+					subBin.dst = cdst
+					bmap[cdst] = subBin
+
+		#if not set the source files, it means only set the source name
+		#try to get the source file from the default directory
+		else:	
+			src = os.path.join( self.defSrcDir, src )
+			if not os.path.exists( src ):
+				logging.error( 'source file not exist:'+src )
+				return False
+			if os.path.isdir(dst):
+				dst = os.path.join( dst, bname )
+			binary.src = src
+			binary.dst = dst
+			bmap[dst] = binary
+
+		return True
+
+	def gen_file_vars( self, fout, lhead, offset ):
+		lines = ''
+		idx = offset
+		for bnry in self.binList:
+			lines += lhead + 'source_file' + str(idx) + '="' + bnry.src + '"\n'
+			lines += lhead + 'target_file' + str(idx) + '="' + bnry.dst + '"\n'
+			lines += lhead + 'backup_file' + str(idx) + '="' + bnry.dst + '-${time_tag}-bak"\n\n'
+			idx += 1
+
+		fout.write( lines )
+		return idx - offset
 
 
-class Library( BaseObject ):
+	def gen_sanity_check( self, fout, lhead ):
+		total = len(self.binList)
+		lines  = lhead + 'local bkupCount=0\n'
+		lines += lhead + 'for (( i=1; i <=' + len(total) + '; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	backup_file=backup_file$i\n'
+		lines += lhead + '	backup_file=${!backup_file}\n'
+		lines += lhead + '	if [[ -f $backup_file ]]; then\n'
+		lines += lhead + '		bkupCount=$(($bkupCount+1))\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + 'done\n'
+		lines += lhead + '# check if all files were installed\n'
+		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
+		lines += lhead + '	echo "patch not installed\n'	
+		lines += lhead + 'elif [ $bkupCount -lt ' + str(total) + ' ]; then\n'
+		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/' + str(total) + '), please revert the patch and try again!\n'
+		lines += lhead + '	return 22\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "patch already exists, aborting."\n'
+		lines += lhead + '	return 21\n'
+		lines += lhead + 'fi\n'
+		
+		fout.write( lines )
+
+
+class Library( Binary ):
 	def __init__( self, parent ):
-		self.src = None
+		super(Library, self).__init__( parent )
 
 
-class LibBlock( BaseObject ):
+class LibBlock( BinBlock ):
 	def __init__( self, parent ):
-		self.defSrcDir = None
-		self.defDstDir = None
-		self.libList = list()
+		super(LibBlock, self).__init__( parent, '/sw/unicorn/lib', '/sw/unicorn/lib' )
 
-	def add_libray( self, library ):
-		self.libList.append( library )
 
 
 class Component( BaseObject ):
@@ -178,4 +351,358 @@ class Component( BaseObject ):
 		self.serviceBlock = None
 		self.binBlock = None
 		self.libBlock = None
+
+		self.deviceMode = None
+		self.compDir = None
+		self.md5File = None
+		self.scriptName = None
+
+	def init_config( self, parent ):
+		if self.name is None:
+			logging.error( 'component name not set:'+str(self) )
+			return False
+
+		if self.serviceBlock:
+			if not self.serviceBlock.init_config( self ):
+				logging.error( 'init service block failed:'+str(self.serviceBlock) )
+				self.serviceBlock = None
+
+		if self.binBlock:
+			if not self.binBlock.init_config( self ):
+				logging.error( 'init binary block failed:'+str(self.binBlock) )
+				self.binBlock = None
+
+		if self.libBlock:
+			if not self.libBlock.init_config( self ):
+				logging.error( 'init library block failed:'+str(self.libBlock) )
+				self.libBlock = None
+
+		if not self.binBlock and not self.libBlock:
+			logging.error( 'no available binary file in this component:'+str(self) )
+			return False
+
+		return True
+
+	def generate( self, pdir ):
+		self.compDir = os.path.join( pdir, self.name )
+		if not mkdir(self.compDir):
+			logging.error( 'create component directory failed:'+str(self) )
+			return False
+		srcDir = os.path.join( self.compDir, 'src' )
+		if not mkdir(srcDir):
+			logging.error( 'create component src directory failed:'+str(self) )
+			return False
+		self.__copy_source_files( srcDir )
+		self.__gen_md5sum_file( srcDir )
+
+		self.scriptName = self.name + '.sh'
+		spath = os.path.join( self.compDir, self.scriptName )
+		fout = open( spath, 'w' )
+
+		self.__gen_head( fout )
+		self.__gen_apply_func( fout )
+		self.__gen_revert_func( fout )
+		self.__gen_verify_func( fout )
+
+		lines  = 'case "$1" in\n'
+		lines += '	apply)\n'
+		lines += '    patch_apply\n'
+		lines += '    ;;\n'
+		lines += '	revert)\n'
+		lines += '    patch_revert\n'
+		lines += '    ;;\n'
+		lines += '	verify)\n'
+		lines += '    patch_verify\n'
+		lines += '    ;;\n'
+		lines += '	*)\n'
+		lines += '    echo $"Usage: $0 {apply|revert|verify}"\n'
+		lines += 'esac\n'
+		fout.write( lines )
+
+		fout.close()
+
+	def __gen_head( self, fout ):
+		lines  = '#!/bin/sh\n'
+		lines += '# patch for ' + self.name + '\n\n'
+		lines += 'component="' + self.name + '"\n'
+		lines += 'md5sum_file="' + self.md5File + '\n\n'
+
+		fout.write( lines )
+
+		offset = 0
+		if self.binBlock:
+			offset += self.binBlock.gen_file_vars( fout, '', offset )
+		if self.libBlock:
+			offset += self.libBlock.gen_file_vars( fout, '', offset )
+
+		lines  = 'total_files=' + str(offset) + '\n'
+		fout.write( lines )
+
+	def __gen_apply_func( self, fout ):
+		lines = 'function patch_apply(){\n'
+		lines += '	echo ""\n'
+		lines += '	echo "#########################################################"\n'
+		lines += '	echo "# Patching $component..."\n\n'
+		fout.write( lines )
+
+		lhead = '\t'
+		self.__gen_check_patched( fout, lhead )
+		self.__gen_check_device_mode( fout, lhead )
+		self.__gen_check_md5sum( fout, lhead )
+		if self.serviceBlock:
+			self.serviceBlock.gen_stop( fout, lhead )
+		self.__gen_mount( fout, lhead, 'rw' )
+		self.__gen_install_bin( fout, lhead )
+		self.__gen_mount( fout, lhead, 'ro' )
+		if self.serviceBlock:
+			self.serviceBlock.gen_start( fout, lhead )
+
+		lines  = ''
+		lines += '}\n'
+		fout.write( lines )
+
+	def __gen_revert_func( self, fout ):
+		lines = 'function patch_revert(){\n'
+		lines += '	echo ""\n'
+		lines += '	echo "#########################################################"\n'
+		lines += '	echo "# Reverting $component..."\n\n'
+		fout.write( lines )
+
+		lhead = '\t'
+		self.__gen_check_reverted( fout, lhead )
+		if self.serviceBlock:
+			self.serviceBlock.gen_stop( fout, lhead )
+		self.__gen_mount( fout, lhead, 'rw' )
+		self.__gen_revert_bin( fout, lhead )
+		self.__gen_mount( fout, lhead, 'ro' )
+		if self.serviceBlock:
+			self.serviceBlock.gen_start( fout, lhead )
+
+		lines  = ''
+		lines += '}\n'
+		fout.write( lines )
+
+	def __gen_verify_func( self, fout ):
+		lines = 'function patch_verify(){\n'
+		lines += '	echo ""\n'
+		lines += '	echo "#########################################################"\n'
+		lines += '	echo "# Verifying $component..."\n\n'
+
+		lines += lhead + 'local installed=1\n'
+		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	file_to_check=target_file$i\n'
+		lines += lhead + '	file_to_check=${!file_to_check}\n'
+		lines += lhead + '	filename_nopath=$(echo "$file_to_check" | sed "s/.*\/\(.\+\)$/\1/")\n'
+		lines += lhead + '	expected_md5=$(grep $filename_nopath $md5sum_file | awk "{ print $1 }")\n'
+		lines += lhead + '	patched_md5=$(md5sum "$file_to_check" | awk "{ print $1 }")\n'
+		lines += lhead + '	\n'
+		lines += lhead + '	echo "Actual checksum is   $patched_md5 for target file $file_to_check."\n'
+		lines += lhead + '	echo "Expected checksum is $expected_md5."\n'
+		lines += lhead + '	\n'
+		lines += lhead + '	if [[ "$patched_md5" = "$expected_md5" ]]; then \n'
+		lines += lhead + '	    installed=$(($installed&1))\n'
+		lines += lhead + '	else\n'
+		lines += lhead + '	    installed=$(($installed&0))\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + 'done\n'
+		lines += lhead + 'if [[ $installed -ne 0 ]]; then\n'
+        lines += lhead + '	echo "Verification: patch has been installed."\n'
+    	lines += lhead + 'else\n'
+        lines += lhead + '	echo "Verification: patch is not installed."\n'
+    	lines += lhead + 'fi\n' 
+
+		lines += '}\n'
+		fout.write( lines )
+
+
+	def __gen_check_patched( self, fout, lhead ):
+		lines  = lhead + '##### sanity check\n'
+		lines += lhead + 'local bkupCount=0\n'
+		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	backup_file=backup_file$i\n'
+		lines += lhead + '	backup_file=${!backup_file}\n'
+		lines += lhead + '	if [[ -f $backup_file ]]; then\n'
+		lines += lhead + '		bkupCount=$(($bkupCount+1))\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + 'done\n\n'
+		lines += lhead + '# check if all files were installed\n'
+		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
+		lines += lhead + '	echo "sanity check: patch not installed\n'	
+		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
+		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files), please revert the patch and try again!\n'
+		lines += lhead + '	return 22\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "patch already exists, aborting."\n'
+		lines += lhead + '	return 21\n'
+		lines += lhead + 'fi\n\n'
+		
+		fout.write( lines )
+
+	def __gen_check_reverted( self, fout, lhead ):
+		lines  = lhead + '##### sanity check\n'
+		lines += lhead + 'local bkupCount=0\n'
+		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	backup_file=backup_file$i\n'
+		lines += lhead + '	backup_file=${!backup_file}\n'
+		lines += lhead + '	if [[ -f $backup_file ]]; then\n'
+		lines += lhead + '		bkupCount=$(($bkupCount+1))\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + 'done\n\n'
+		lines += lhead + '# check if all files were installed\n'
+		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
+		lines += lhead + '	echo "sanity check: patch not installed, aborting.\n'
+		lines += lhead + '	return 31\n'
+		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
+		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files)\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "sanity check: patch installed."\n'
+		lines += lhead + 'fi\n\n'
+		
+		fout.write( lines )
+
+	def __gen_check_device_mode( self, fout, lhead ):
+		if self.deviceMode:
+			lines  = ''
+			lines += lhead + '##### check device mode\n'
+			lines += lhead + 'device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk "{ print $4 }")\n'
+			lines += lhead + 'if [[ "$device_mode" = "' + self.deviceMode + '" ]]; then\n'
+			lines += lhead + '	echo "current device mode is $device_mode"\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "patch can only be applied to $device_mode, aborting."\n'
+			lines += lhead + '	return 0 #it returns 0 here to show a friendly result\n'
+			lines += lhead + 'fi\n'
+			fout.write( lines )
+	
+	def __gen_check_md5sum( self, fout, lhead ):
+		lines  = lhead + 'md5sum --status -c $md5sum_file\n'
+		lines += lhead + 'md5_rc=$?\n'
+		lines += lhead + 'if [ $md5_rc -ne 0 ]; then\n'
+		lines += lhead + '	echo "ERROR: patch file corrupted, aborting, please check"\n'
+		lines += lhead + '	exit 24\n'
+		lines += lhead + 'fi\n'
+		fout.write( lines )
+
+	def __gen_mount( self, fout, lhead, perm ):
+		lines  = lhead + 'mount -n -o remount,' + perm + ' /sw\n'
+		lines += lhead + 'if [ $? -ne 0 ]; then\n'
+		lines += lhead + '	echo "ERROR: unable to remount partition as rw mode"\n'
+		lines += lhead + '	echo "Please try the patch later or reload the device and retry."\n'
+		lines += lhead + '	exit 28\n'
+		lines += lhead + 'fi\n'
+		lines += lhead + 'sleep 10\n'
+		fout.write( lines )
+
+	def __gen_install_bin( self, fout, lhead ):
+		lines  = lhead + '##### replace binary\n'
+		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	target_file=target_file$i\n'
+		lines += lhead + '	backup_file=backup_file$i\n'
+		lines += lhead + '	source_file=source_file$i\n'
+		lines += lhead + '	target_file=${!target_file}\n'
+		lines += lhead + '	backup_file=${!backup_file}\n'
+		lines += lhead + '	source_file=${!source_file}\n'
+		lines += lhead + '	mv -f $target_file $backup_file\n'
+		lines += lhead + '	cp -f $source_file $target_file\n'
+		lines += lhead + '	chmod a+x $target_file\n'
+		lines += lhead + 'done\n'
+		lines += lhead + 'echo "Patch files copied."\n'
+		lines += lhead + 'sleep 10\n'
+		fout.write( lines )
+
+	def __gen_revert_bin( self, fout, lhead ):
+		lines  = lhead + '##### replace binary\n'
+		lines += lhead + 'for (( i=1; i<=total_files; i++ ))\n'
+		lines += lhead + 'do\n'
+		lines += lhead + '	target_file=target_file$i\n'
+		lines += lhead + '	backup_file=backup_file$i\n'
+		lines += lhead + '	source_file=source_file$i\n'
+		lines += lhead + '	target_file=${!target_file}\n'
+		lines += lhead + '	backup_file=${!backup_file}\n'
+		lines += lhead + '	source_file=${!source_file}\n'
+		lines += lhead + '	rm -f $target_file\n'
+		lines += lhead + '	mv -f $backup_file $target_file\n'
+		lines += lhead + '	chmod a+x $target_file\n'
+		lines += lhead + 'done\n'
+		lines += lhead + 'echo "Patch files reverted."\n'
+		lines += lhead + 'sleep 10\n'
+		fout.write( lines )
+
+	def __copy_source_files( self, srcDir ):
+		try:
+			if self.binBlock:
+				for bnry in self.binBlock.binList:
+					shutil.copy( bnry.src, srcDir )
+
+			if self.libBlock:
+				for lib in self.libBlock.binList:
+					shutil.copy( lib.src, srcDir )
+
+			return True
+		except:
+			return False
+
+	def __gen_md5sum_file( self, srcDir ):
+		self.md5File = 'sum.md5'
+		cmd = 'md5sum ' + srcDir + '/* > ' + self.md5File
+		os.system( cmd )
+
+
+class Patcher( BaseObject ):
+	def __init__( self ):
+		self.version = ''
+		self.bugs = ''
+		self.timeTag = None
+		self.packageDir = None
+		self.serviceBlock = None
+		self.compList = list()
+
+	def add_component( self, comp ):
+		self.compList.append( comp )
+
+	def init_config( self ):
+		if self.serviceBlock:
+			if not self.serviceBlock.init_config( self ):
+				logging.error( 'init service block failed:'+str(self.serviceBlock) )
+				self.serviceBlock = None
+
+		clist = list()
+		for comp in self.compList:
+			if comp.init_config( self ):
+				clist.append( comp )
+			else:
+				logging.error( 'invalid component:'+str(comp) )
+
+		self.compList = clist
+		return len(self.compList) > 0
+
+	def generate( self ):
+		if not self.timeTag:
+			now = datetime.now()
+			self.timeTag = str_time( now, '%Y/%m/%d' )
+
+		if not self.packageDir:
+			self.packageDir = 'patch_package_' + self.version + '_' + self.timeTag
+
+		if not mkdir(self.packageDir):
+			logging.fatal( 'create package directory failed:'+str(self) )
+			return False
+
+
+
+	def __gen_comps( self ):
+		if self.compList:
+			for comp in self.compList:
+				if not comp.generate( self.packageDir ):
+					logging.error( 'generate failed on compent:'+str(comp) )
+					return False
+
+		return True
+
+
+
+
 
