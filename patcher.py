@@ -91,7 +91,7 @@ class Service( BaseObject ):
 			lines += lhead + '	echo "Process started, go on..."\n'
 			lines += lhead + 'else\n'
 			lines += lhead + '	echo "ERROR: $tarsvc retarting failed in service:' + self.name + '"\n'
-        	lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
+			lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
 			lines += lhead + '	exit 26\n'
 			lines += lhead + 'fi\n'
 		fout.write( lines )
@@ -150,7 +150,7 @@ class Process( BaseObject ):
 		lines += lhead + '	echo "Process started, go on..."\n'
 		lines += lhead + 'else\n'
 		lines += lhead + '	echo "ERROR: $tarsvc retarting failed "\n'
-        lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
+		lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
 		lines += lhead + '	exit 26\n'
 		lines += lhead + 'fi\n'
 		fout.write( lines )
@@ -494,8 +494,8 @@ class Component( BaseObject ):
 		lines += lhead + '	file_to_check=target_file$i\n'
 		lines += lhead + '	file_to_check=${!file_to_check}\n'
 		lines += lhead + '	filename_nopath=$(echo "$file_to_check" | sed "s/.*\/\(.\+\)$/\1/")\n'
-		lines += lhead + '	expected_md5=$(grep $filename_nopath $md5sum_file | awk "{ print $1 }")\n'
-		lines += lhead + '	patched_md5=$(md5sum "$file_to_check" | awk "{ print $1 }")\n'
+		lines += lhead + '	expected_md5=$(grep $filename_nopath $md5sum_file | awk \'{ print $1 }\')\n'
+		lines += lhead + '	patched_md5=$(md5sum "$file_to_check" | awk \'{ print $1 }\')\n'
 		lines += lhead + '	\n'
 		lines += lhead + '	echo "Actual checksum is   $patched_md5 for target file $file_to_check."\n'
 		lines += lhead + '	echo "Expected checksum is $expected_md5."\n'
@@ -507,10 +507,10 @@ class Component( BaseObject ):
 		lines += lhead + '	fi\n'
 		lines += lhead + 'done\n'
 		lines += lhead + 'if [[ $installed -ne 0 ]]; then\n'
-        lines += lhead + '	echo "Verification: patch has been installed."\n'
-    	lines += lhead + 'else\n'
-        lines += lhead + '	echo "Verification: patch is not installed."\n'
-    	lines += lhead + 'fi\n' 
+		lines += lhead + '	echo "Verification: patch has been installed."\n'
+		lines += lhead + 'else\n'
+		lines += lhead + '	echo "Verification: patch is not installed."\n'
+		lines += lhead + 'fi\n' 
 
 		lines += '}\n'
 		fout.write( lines )
@@ -567,7 +567,7 @@ class Component( BaseObject ):
 		if self.deviceMode:
 			lines  = ''
 			lines += lhead + '##### check device mode\n'
-			lines += lhead + 'device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk "{ print $4 }")\n'
+			lines += lhead + 'device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk \'{ print $4 }\')\n'
 			lines += lhead + 'if [[ "$device_mode" = "' + self.deviceMode + '" ]]; then\n'
 			lines += lhead + '	echo "current device mode is $device_mode"\n'
 			lines += lhead + 'else\n'
@@ -653,6 +653,7 @@ class Component( BaseObject ):
 
 class Patcher( BaseObject ):
 	def __init__( self ):
+		self.customer = ''
 		self.version = ''
 		self.bugs = ''
 		self.timeTag = None
@@ -691,6 +692,8 @@ class Patcher( BaseObject ):
 			logging.fatal( 'create package directory failed:'+str(self) )
 			return False
 
+		self.__gen_comps()
+		self.__gen_main_script()
 
 
 	def __gen_comps( self ):
@@ -702,7 +705,201 @@ class Patcher( BaseObject ):
 
 		return True
 
+	def __gen_main_script( self ):
+		scriptName = 'cdsis_' + self.version + '_patch_' + self.timeTag + '.sh.sign'
+		fout = open( scriptName, 'w' )
 
+		self.__gen_head( fout )
+		self.__gen_uncompress_func( fout )
+		self.__gen_validate_func( fout )
+		self.__gen_apply_func( fout )
+		self.__gen_revert_func( fout )
+		self.__gen_verify_func( fout )
+		self.__gen_clean_func( fout )
 
+		lines  = 'case "$1" in\n'
+		lines += '		apply)\n'
+		lines += '			patch_apply $2\n'
+		lines += '			;;\n'
+		lines += '		revert)\n'
+		lines += '			patch_revert\n'
+		lines += '			;;\n'
+		lines += '		verify)\n'
+		lines += '			patch_verify\n'
+		lines += '			;;\n'
+		lines += '		clean)\n'
+		lines += '			patch_clean\n'
+		lines += '			;;\n'
+		lines += '		*)\n'
+		lines += '			echo $"Usage: $0 {apply|revert|verify|clean}"\n'
+		lines += 'esac\n'
+		fout.write( lines )
+		fout.close()
 
+	def __gen_head( self, fout ):
+		lines  = '#!/bin/sh\n'
+		lines += '# patch on cds-is 3.1.2b60 for Telstra\n'
+		lines += '# cedets: CSCun32554\n'
+		lines += '\n'
+		lines += 'customer="Telstra"\n'
+		lines += 'target_version="3.1.2b60" # major(.)minor(.)maintenance(b)build\n'
+		lines += 'version_tag="vds-is $target_version(For $customer)"\n'
+		lines += 'time_tag="20140226"\n'
+		lines += '\n'
+		lines += 'package_name="patch_package_${target_version}_${time_tag}"\n'
+		lines += 'package_file="./$package_name.tar.gz"\n\n'
+		
+		idx = 0
+		for comp in self.compList:
+			idx += 1
+			spath = os.path.join( comp.compDir, comp.scriptName )
+			cmd = 'md5sum ' + spath
+			fin = os.popen( cmd, 'r' )
+			md5sum = ''
+			for line in fin:
+				segs = line.split()
+				md5sum = segs[-1]
+				break
+			fin.close()
 
+			lines += 'script_file' + str(idx) + '="' + spath + '"\n'
+			lines += 'script_md5sum' + str(idx) + '="' + md5sum + '"\n'
+
+		lines += 'sleep_time=10\n\n'
+		fout.write( lines )
+			
+	def __gen_uncompress_func( self, fout ):
+		lines  = 'package_uncompress() {\n'
+		lines += '	\n'
+		lines += '	if [ ! -f $package_file ]; then\n'
+		lines += '		echo "ERROR: patch package file $package_file does not exist, aborting, please check"\n'
+		lines += '		exit 11\n'
+		lines += '	fi\n'
+		lines += '	\n'
+		lines += '	tar xzf $package_file\n'
+		lines += '	if [ $? -ne 0 ]; then\n'
+		lines += '		echo "ERROR: patch package file $package_file is corrupted, aborting, please check"\n'
+		lines += '		exit 12\n'
+		lines += '	fi\n'
+		lines += '\n'
+		lines += '}\n'
+		fout.write( lines )
+
+	def __gen_validate_func( self, fout ):
+		lines  = 'scripts_validate() {\n'
+		lines += '	\n'
+		lines += '	for (( n=1; n<=$total_files; n++ ))\n'
+		lines += '	do\n'
+		lines += '		script_file_name=script_file$n\n'
+		lines += '		expected_script_md5=script_md5sum$n\n'
+		lines += '		\n'
+		lines += '		script_file_name=${!script_file_name}\n'
+		lines += '		expected_script_md5=${!expected_script_md5}\n'
+		lines += '		\n'
+		lines += '		actual_script_md5=$(md5sum $script_file_name | awk \'{ print $1 }\')\n'
+		lines += '		\n'
+		lines += '		if [[ "$expected_script_md5" != "$actual_script_md5" ]]; then\n'
+		lines += '			echo "Patch files do not exist or scripts have been modified, aborting."\n'
+		lines += '			exit 41\n'
+		lines += '		fi\n'
+		lines += '	done\n'
+		lines += '}\n'
+
+	def __gen_apply_func( self, fout ):
+		lines  = 'patch_apply() {\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	echo "## Patch for $version_tag"\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	\n'
+		lines += '	cds_version=$(/ruby/bin/exec -c "show version" | grep "Content Delivery System Software Release" | awk '{ print $6$8 }')\n'
+		lines += '	if [[ "$cds_version" = "$target_version" ]]; then\n'
+		lines += '		echo "Current cds-is version $cds_version"\n'
+		lines += '	else\n'
+		lines += '		echo "Patch is only applied to cds-is $target_version (but current is $cds_version), aborting."\n'
+		lines += '		exit 23\n'
+		lines += '	fi\n'
+		lines += '	\n'
+		lines += '	echo "Uncompressing package file..."\n'
+		lines += '	package_uncompress\n'
+		lines += '	echo "Package file uncompressed."\n'
+		lines += '	scripts_validate\n'
+		lines += '	\n'
+		lines += '	ret=0\n'
+		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	do\n'
+		lines += '		script_file_name=script_file$n\n'
+		lines += '		script_file_name=${!script_file_name}\n'
+		lines += '		source $script_file_name apply $sleep_time\n'
+		lines += '		ret=$(($ret|$?))\n'
+		lines += '	done\n'
+		lines += '\n'
+		lines += '	echo ""\n'
+		lines += '	echo "" \n'
+		lines += '	if [[ $ret -eq 0 ]]; then\n'
+		lines += '		echo "Patch apply succeeded for all applicable modules."\n'
+		lines += '	else\n'
+		lines += '		echo "Patch apply succeeded for only some of the module(s), code $ret."\n'
+		lines += '		echo "Please refer to above details to examine which module(s) failed/succeeded."\n'
+		lines += '		echo "Please note that the modules not being installed might be those are not applicable to this device."		\n'
+		lines += '	fi  \n'
+		lines += '}\n'
+		fout.write( lines )
+	
+	def __gen_revert_func( self, fout ):
+		lines  = 'patch_revert() {\n'
+		lines += '	check_required=0\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	echo "## Patch revert for $version_tag"\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	\n'
+		lines += '	scripts_validate\n'
+		lines += ' \n'
+		lines += '	ret=0\n'
+		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	do\n'
+		lines += '		script_file_name=script_file$n\n'
+		lines += '		script_file_name=${!script_file_name}\n'
+		lines += '		source $script_file_name revert $sleep_time\n'
+		lines += '		ret=$(($ret|$?))\n'
+		lines += '	done\n'
+		lines += '\n'
+		lines += '	echo ""\n'
+		lines += '	echo ""\n'
+		lines += '	if [[ $ret -eq 0 ]]; then\n'
+		lines += '		echo "Patch revert succeeded for all applicable modules."\n'
+		lines += '	else\n'
+		lines += '		echo "Patch revert succeeded for only some of the module(s), code $ret."\n'
+		lines += '		echo "Please refer to above details to examine which module(s) failed/succeeded."\n'
+		lines += '		echo "Please note that the modules not being reverted might be those are not applicable to this device."\n'
+		lines += '	fi\n'
+		lines += '}\n'
+		fout.write( lines )
+	
+	def __gen_verify_func( self, fout ):
+		lines  = 'patch_verify() {\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	echo "## Patch verification for $version_tag"\n'
+		lines += '	echo "############################################################"\n'
+		lines += '	\n'
+		lines += '	# force to uncompress the package every time do verification\n'
+		lines += '	package_uncompress\n'
+		lines += '	scripts_validate\n'
+		lines += '	\n'
+		lines += '	ret=0\n'
+		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	do\n'
+		lines += '		script_file_name=script_file$n\n'
+		lines += '		script_file_name=${!script_file_name}\n'
+		lines += '		source $script_file_name verify $sleep_time\n'
+		lines += '		ret=$(($ret|$?))\n'
+		lines += '	done\n'
+		lines += '}\n'
+		fout.write( lines )
+	
+	def __gen_clean_func( self, fout ):
+		lines  = 'patch_clean() {\n'
+		lines += '	rm -fr ./$package_name/\n'
+		lines += '	echo "Files generated while running the patch have been cleaned."\n'
+		lines += '	echo "Please note that the original .tar.gz and script files are not removed. You might want to delete them manually."\n'
+		lines += '}\n'
+		fout.write( lines )
