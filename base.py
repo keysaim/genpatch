@@ -29,6 +29,9 @@ def is_new_version( ):
 	return NEW_VERSION
 
 def check_version():
+	global NEW_VERSION
+	global LOGGING_FORMAT
+
 	if not sys.version.startswith( '2.7' ):
 		NEW_VERSION = False
 		#for old version, the funcName may not support

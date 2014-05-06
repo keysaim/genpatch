@@ -1,38 +1,35 @@
 <patch>
-	<services>
-		<!--how long will it need wait for after stopping, in seconds-->
-		<waitTime>10</waitTime>
+	<component>
+		<name>service-router</name>
+		<services>
+			<!--how long will it need wait for after stopping, in seconds-->
+			<waitTime>20</waitTime>
+			<service>
+				<!--the service needs to be stopped before patch by nodemgr, 
+				 and sometimes, you need point out the processes that need to
+				 be checked to make sure the service is stopped or started successfully-->
+			<name>fmsserver</name>
+			<!--the process needs be checked-->
+			<process>fmsedge</process>
+		</service>
 		<service>
 			<!--the service needs to be stopped before patch by nodemgr, 
 				 and sometimes, you need point out the processes that need to
 				 be checked to make sure the service is stopped or started successfully-->
-			<name>stream_scheduler</name>
-			<!--the process needs be checked-->
-			<process>stream-scheduler</process>
+			<name>sr</name>
+			<!--the process needs be checked to see if it's stopped/started-->
+			<process>service_router</process>
 		</service>
-		<!--sometimes the service is not managed by nodemgr, it needs stop the processes manually,
-			 we use process block to define this-->
-		<process>
-			<name>stream-scheduler</name>
-			<!--stop command, by default, it's kill -9-->
-			<stop>kill -9 `pidof stream-scheduler`</stop>
-			<!--start command, by default, it will try invoke the bin file in /sw/unicorn/bin-->
-			<start>/sw/unicorn/bin/stream-scheduler</start>
-		</process>
 	</services>
-	<component>
-		<name>stream-scheduler</name>
-		<bins>
-			<!--defSrcDir>/sw/unicorn/bin</defSrcDir-->
-			<!--defDstDir>/sw/unicorn/bin</defDstDir-->
-			<bin>
-				<src>stream-scheduler</src>
-			</bin>
-		</bins>
-		<libs>
-			<lib>
-				<src>ss.lib</src>
-			</lib>
-		</libs>
+	<bins>
+		<bin>
+			<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/bin</src>
+		</bin>
+	</bins>
+	<libs>
+		<lib>
+			<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib</src>
+		</lib>
+	</libs>
 	</component>
 </patch>

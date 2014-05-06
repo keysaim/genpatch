@@ -28,7 +28,7 @@ class ConfigParser( BaseObject ):
 		for cnode in node.childNodes:
 			name = cnode.nodeName
 			if name == 'services':
-				patcher.serviceBlock = self.__parse_services( cnode )
+				patcher.serviceBlock = self.__parse_services( cnode, patcher )
 				logging.debug( 'one service block parsed:'+str(patcher.serviceBlock) )
 			elif name == 'component':
 				comp = self.__parse_component( cnode, node )
@@ -37,7 +37,7 @@ class ConfigParser( BaseObject ):
 
 		return patcher
 
-	def __parse_services( self, node ):
+	def __parse_services( self, node, parent ):
 		sblock = ServiceBlock()
 
 		#parse the common config
@@ -101,7 +101,7 @@ class ConfigParser( BaseObject ):
 			elif name == 'libs':
 				comp.libBlock = self.__parse_libs( cnode, comp )
 			elif name == 'services':
-				comp.serviceBlock = self.__parse_services( self, comp )
+				comp.serviceBlock = self.__parse_services( cnode, comp )
 		
 		logging.debug( 'parsed one component:'+str(comp) )
 		return comp

@@ -88,10 +88,10 @@ class Service( BaseObject ):
 			lines += lhead + 'pidof $tarproc > /dev/null\n'
 			lines += lhead + 'local pidof_rc=$?\n'
 			lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
-			lines += lhead + '	echo "Process started, go on..."\n'
+			lines += lhead + '	echo "Process $tarproc started, go on..."\n'
 			lines += lhead + 'else\n'
-			lines += lhead + '	echo "ERROR: $tarsvc retarting failed in service:' + self.name + '"\n'
-			lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
+			lines += lhead + '	echo "ERROR: $tarproc retarting failed in service:' + self.name + '"\n'
+			lines += lhead + '	echo "Please run patch revert and then check the $tarproc proccess."\n'
 			lines += lhead + '	exit 26\n'
 			lines += lhead + 'fi\n'
 		fout.write( lines )
@@ -109,7 +109,7 @@ class Service( BaseObject ):
 			lines += lhead + '	echo "Please check the $tarproc process and retry the patch later."\n'
 			lines += lhead + '	exit 25\n'
 			lines += lhead + 'else\n'
-			lines += lhead + '	echo "Process stopped, go on..."\n'
+			lines += lhead + '	echo "Process $tarproc stopped, go on..."\n'
 			lines += lhead + 'fi\n'
 		fout.write( lines )
 
@@ -196,24 +196,30 @@ class ServiceBlock( BaseObject ):
 		return len(self.services) > 0
 
 	def gen_start( self, fout, lhead ):
+		lines = lhead + 'echo "trying start services..."\n'
+		fout.write( lines )
 		for (service, isSer) in self.services:
 			service.gen_start( fout, lhead )
 
-		lines = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines  = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines += lhead + 'echo "checking if services started..."\n'
 		fout.write( lines )
 
 		for (service, isSer) in self.services:
 			service.gen_check_started( fout, lhead )
 	
 	def gen_stop( self, fout, lhead ):
+		lines = lhead + 'echo "trying stop services..."\n'
+		fout.write( lines )
 		for (service, isSer) in self.services:
 			service.gen_stop( fout, lhead )
 
-		lines = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines  = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines += lhead + 'echo "checking if services stopped..."\n'
 		fout.write( lines )
 
 		for (service, isSer) in self.services:
-			service.gen_stop( fout, lhead )
+			service.gen_check_stopped( fout, lhead )
 
 
 class Binary( BaseObject ):
@@ -278,7 +284,7 @@ class BinBlock( BaseObject ):
 					if not os.path.isfile(cdst):
 						cdst = os.path.join( cdst, fname )
 
-					subBin = Binary( binary.parent )
+					subBin = Binary( self )
 					subBin.src = fpath
 					subBin.dst = cdst
 					bmap[cdst] = subBin
@@ -435,6 +441,7 @@ class Component( BaseObject ):
 		lines += '	*)\n'
 		lines += '    echo $"Usage: $0 {apply|revert|verify}"\n'
 		lines += 'esac\n'
+		lines += 'cd $org_pwd\n'
 		fout.write( lines )
 
 		fout.close()
@@ -445,6 +452,7 @@ class Component( BaseObject ):
 		lines += '# patch for ' + self.name + '\n\n'
 		lines += 'component="' + self.name + '"\n'
 		lines += 'md5sum_file="' + self.md5File + '"\n\n'
+		lines += 'org_pwd=$PWD\n'
 		lines += 'cd ' + self.orgCompDir + '\n\n'
 
 		fout.write( lines )
@@ -470,12 +478,18 @@ class Component( BaseObject ):
 		self.__gen_check_device_mode( fout, lhead )
 		self.__gen_check_md5sum( fout, lhead )
 		if self.serviceBlock:
+			fout.write( '\n' )
 			self.serviceBlock.gen_stop( fout, lhead )
+		else:
+			logging.info( 'no service block to stop' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_install_bin( fout, lhead )
 		self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
+			fout.write( '\n' )
 			self.serviceBlock.gen_start( fout, lhead )
+		else:
+			logging.info( 'no service block to start' )
 
 		lines  = ''
 		lines += '}\n'
@@ -514,7 +528,7 @@ class Component( BaseObject ):
 		lines += lhead + 'do\n'
 		lines += lhead + '	file_to_check=target_file$i\n'
 		lines += lhead + '	file_to_check=${!file_to_check}\n'
-		lines += lhead + '	filename_nopath=$(echo "$file_to_check" | sed "s/.*\/\(.\+\)$/\1/")\n'
+		lines += lhead + '	filename_nopath=$(echo "$file_to_check" | sed "s/.*\/\(.\+\)$/\\1/")\n'
 		lines += lhead + '	expected_md5=$(grep $filename_nopath $md5sum_file | awk \'{ print $1 }\')\n'
 		lines += lhead + '	patched_md5=$(md5sum "$file_to_check" | awk \'{ print $1 }\')\n'
 		lines += lhead + '	\n'
@@ -550,7 +564,7 @@ class Component( BaseObject ):
 		lines += lhead + 'done\n\n'
 		lines += lhead + '# check if all files were installed\n'
 		lines += lhead + 'if [ $bkupCount -eq 0 ]; then\n'
-		lines += lhead + '	echo "sanity check: patch not installed"\n'	
+		lines += lhead + '	echo "sanity check: patch not installed, go on..."\n'	
 		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
 		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files), please revert the patch and try again!"\n'
 		lines += lhead + '	return 22\n'
@@ -579,7 +593,7 @@ class Component( BaseObject ):
 		lines += lhead + 'elif [ $bkupCount -lt $total_files ]; then\n'
 		lines += lhead + '	echo "ERROR: patch not install completely($bkupCount/$total_files)"\n'
 		lines += lhead + 'else\n'
-		lines += lhead + '	echo "sanity check: patch installed."\n'
+		lines += lhead + '	echo "sanity check: patch installed, go on..."\n'
 		lines += lhead + 'fi\n\n'
 		
 		fout.write( lines )
@@ -609,7 +623,7 @@ class Component( BaseObject ):
 	def __gen_mount( self, fout, lhead, perm ):
 		lines  = lhead + 'mount -n -o remount,' + perm + ' /sw\n'
 		lines += lhead + 'if [ $? -ne 0 ]; then\n'
-		lines += lhead + '	echo "ERROR: unable to remount partition as rw mode"\n'
+		lines += lhead + '	echo "ERROR: unable to remount partition as ' + perm + ' mode"\n'
 		lines += lhead + '	echo "Please try the patch later or reload the device and retry."\n'
 		lines += lhead + '	exit 28\n'
 		lines += lhead + 'fi\n'
@@ -781,13 +795,22 @@ class Patcher( BaseObject ):
 		fout.write( lines )
 		fout.close()
 
+		cmd  = 'cd ' + self.outDir
+		cmd += ';tar czf ' + self.packageDirName + '.tar.gz ' + self.packageDirName
+		logging.debug( 'run cmd:'+cmd )
+		os.system( cmd )
+		
+		cmd = '/ruby/bin/exec_script emit-checksum ' + spath + ' >> ' + spath
+		logging.debug( 'run cmd:'+cmd )
+		os.system( cmd )
+
 	def __gen_head( self, fout ):
 		lines  = '#!/bin/sh\n'
-		lines += '# patch on cds-is 3.1.2b60 for Telstra\n'
-		lines += '# cedets: CSCun32554\n'
+		lines += '# patch on ' + self.version + ' for ' + self.customer + '\n'
+		lines += '# cedets: ' + self.bugs + '\n'
 		lines += '\n'
 		lines += 'customer="Telstra"\n'
-		lines += 'target_version="3.1.2b60" # major(.)minor(.)maintenance(b)build\n'
+		lines += 'target_version="' + self.version + '" # major(.)minor(.)maintenance(b)build\n'
 		lines += 'version_tag="vds-is $target_version(For $customer)"\n'
 		lines += 'time_tag="' + self.timeTag + '"\n'
 		lines += '\n'
@@ -812,7 +835,8 @@ class Patcher( BaseObject ):
 
 			lines += 'script_file' + str(idx) + '="' + opath + '"\n'
 			lines += 'script_md5sum' + str(idx) + '="' + md5sum + '"\n'
-
+		
+		lines += 'total_scripts=' + str(idx) + '\n'
 		lines += '\n\n'
 		fout.write( lines )
 			
@@ -836,7 +860,7 @@ class Patcher( BaseObject ):
 	def __gen_validate_func( self, fout ):
 		lines  = 'scripts_validate() {\n'
 		lines += '	\n'
-		lines += '	for (( n=1; n<=$total_files; n++ ))\n'
+		lines += '	for (( n=1; n<=$total_scripts; n++ ))\n'
 		lines += '	do\n'
 		lines += '		script_file_name=script_file$n\n'
 		lines += '		expected_script_md5=script_md5sum$n\n'
@@ -852,6 +876,7 @@ class Patcher( BaseObject ):
 		lines += '		fi\n'
 		lines += '	done\n'
 		lines += '}\n'
+		fout.write( lines )
 
 	def __gen_apply_func( self, fout ):
 		lines  = 'patch_apply() {\n'
@@ -873,11 +898,11 @@ class Patcher( BaseObject ):
 		lines += '	scripts_validate\n'
 		lines += '	\n'
 		lines += '	ret=0\n'
-		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	for (( n=1; n<=total_scripts; n++ ))\n'
 		lines += '	do\n'
 		lines += '		script_file_name=script_file$n\n'
 		lines += '		script_file_name=${!script_file_name}\n'
-		lines += '		source $script_file_name apply $sleep_time\n'
+		lines += '		sh $script_file_name apply\n'
 		lines += '		ret=$(($ret|$?))\n'
 		lines += '	done\n'
 		lines += '\n'
@@ -903,11 +928,11 @@ class Patcher( BaseObject ):
 		lines += '	scripts_validate\n'
 		lines += ' \n'
 		lines += '	ret=0\n'
-		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	for (( n=1; n<=total_scripts; n++ ))\n'
 		lines += '	do\n'
 		lines += '		script_file_name=script_file$n\n'
 		lines += '		script_file_name=${!script_file_name}\n'
-		lines += '		source $script_file_name revert $sleep_time\n'
+		lines += '		sh $script_file_name revert\n'
 		lines += '		ret=$(($ret|$?))\n'
 		lines += '	done\n'
 		lines += '\n'
@@ -934,11 +959,11 @@ class Patcher( BaseObject ):
 		lines += '	scripts_validate\n'
 		lines += '	\n'
 		lines += '	ret=0\n'
-		lines += '	for (( n=1; n<=total_files; n++ ))\n'
+		lines += '	for (( n=1; n<=total_scripts; n++ ))\n'
 		lines += '	do\n'
 		lines += '		script_file_name=script_file$n\n'
 		lines += '		script_file_name=${!script_file_name}\n'
-		lines += '		source $script_file_name verify $sleep_time\n'
+		lines += '		sh $script_file_name verify\n'
 		lines += '		ret=$(($ret|$?))\n'
 		lines += '	done\n'
 		lines += '}\n'
