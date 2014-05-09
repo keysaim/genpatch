@@ -2,34 +2,43 @@
 	<component>
 		<name>service-router</name>
 		<services>
-			<!--how long will it need wait for after stopping, in seconds-->
+			<!--how long will it need wait for after stopping/starting the services, in seconds-->
 			<waitTime>20</waitTime>
 			<service>
-				<!--the service needs to be stopped before patch by nodemgr, 
-				 and sometimes, you need point out the processes that need to
-				 be checked to make sure the service is stopped or started successfully-->
-			<name>fmsserver</name>
-			<!--the process needs be checked-->
-			<process>fmsedge</process>
-		</service>
-		<service>
-			<!--the service needs to be stopped before patch by nodemgr, 
-				 and sometimes, you need point out the processes that need to
-				 be checked to make sure the service is stopped or started successfully-->
-			<name>sr</name>
-			<!--the process needs be checked to see if it's stopped/started-->
-			<process>service_router</process>
-		</service>
-	</services>
-	<bins>
-		<bin>
-			<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/bin</src>
-		</bin>
-	</bins>
-	<libs>
-		<lib>
-			<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib</src>
-		</lib>
-	</libs>
+				<!--the service needs to be stopped before patch by nodemgr,-->
+				<!--and sometimes, you need point out the processes that need to-->
+				<!--be checked to make sure the service is stopped or started successfully-->
+				<name>fmsserver</name>
+				<!--the process needs be checked-->
+				<process>fmsedge</process>
+			</service>
+			<service>
+				<!--same as above-->
+				<name>sr</name>
+				<!--the process needs be checked to see if it's stopped/started-->
+				<process>service_router</process>
+			</service>
+		</services>
+		<bins>
+			<bin>
+				<!--* where you put your binary files-->
+				<!--* if it's a directory, the tool will consider all files under this directory-->
+				<!--	as the src files; and also you can set a single normal file path here-->
+				<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/bin</src>
+				<!--* where you patch your src files to-->
+				<!--* you must set a directory here, if you want to set a file path here, please-->
+				<!--	use the "dstfile" element instead-->
+				<!--* if you didn't set it, by default, it will use '/sw/unicorn/bin' as the dst directory-->
+				<dst>/sw/unicorn/bin</dst>
+			</bin>
+		</bins>
+		<libs>
+			<lib>
+				<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib</src>
+				<!--* if you want to set a normal file as the dst, you must use the dstfile element-->
+				<!--* if you don't set any dst/dstfile element, it always use the /sw/unicorn/lib by default-->
+				<dstfile>/sw/unicorn/lib/libSRClient.so</dstfile>
+			</lib>
+		</libs>
 	</component>
 </patch>

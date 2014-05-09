@@ -226,6 +226,7 @@ class Binary( BaseObject ):
 	def __init__( self, parent ):
 		self.src = None
 		self.dst = None
+		self.dstFile = None
 
 
 class BinBlock( BaseObject ):
@@ -267,22 +268,28 @@ class BinBlock( BaseObject ):
 		if os.path.exists( src ):
 			if os.path.isfile(src):
 				bname = os.path.basename( src )
-				if not os.path.isfile(dst):
+				if binary.dstFile:
+					dst = binary.dstFile
+				else:
 					dst = os.path.join( dst, bname )
 				binary.src = src
 				binary.dst = dst
 				bmap[dst] = binary
 				logging.debug( 'inited one binary:'+str(binary) )
 			else:
+				if dst is None:
+					logging.error( 'you must set the dst element for binary:'+str(binary) )
+					return False
+
 				#include many files here
 				for fname in os.listdir(src):
 					fpath = os.path.join( src, fname )
 					if os.path.isdir(fpath):
 						continue
 					
-					cdst = dst
-					if not os.path.isfile(cdst):
-						cdst = os.path.join( cdst, fname )
+					#the dst must be a directory
+					#we won't consider dstFile here, as the src is a directory
+					cdst = os.path.join( dst, fname )
 
 					subBin = Binary( self )
 					subBin.src = fpath
@@ -297,7 +304,10 @@ class BinBlock( BaseObject ):
 			if not os.path.exists( src ):
 				logging.error( 'source file not exist:'+src )
 				return False
-			if not os.path.isfile(dst):
+
+			if binary.dstFile:
+				dst = binary.dstFile
+			else:
 				dst = os.path.join( dst, bname )
 			binary.src = src
 			binary.dst = dst
@@ -809,10 +819,10 @@ class Patcher( BaseObject ):
 		lines += '# patch on ' + self.version + ' for ' + self.customer + '\n'
 		lines += '# cedets: ' + self.bugs + '\n'
 		lines += '\n'
-		lines += 'customer="Telstra"\n'
-		lines += 'target_version="' + self.version + '" # major(.)minor(.)maintenance(b)build\n'
-		lines += 'version_tag="vds-is $target_version(For $customer)"\n'
-		lines += 'time_tag="' + self.timeTag + '"\n'
+		lines += 'export customer="Telstra"\n'
+		lines += 'export target_version="' + self.version + '" # major(.)minor(.)maintenance(b)build\n'
+		lines += 'export version_tag="vds-is $target_version(For $customer)"\n'
+		lines += 'export time_tag="' + self.timeTag + '"\n'
 		lines += '\n'
 		lines += 'package_name="patch_package_${target_version}_${time_tag}"\n'
 		lines += 'package_file="./$package_name.tar.gz"\n\n'

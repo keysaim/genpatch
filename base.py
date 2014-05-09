@@ -14,6 +14,8 @@ from  xml.dom import  minidom
 import traceback
 import logging
 
+import recipe
+
 NEW_VERSION = True
 
 RES_DIR = 'output'

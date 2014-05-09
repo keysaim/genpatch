@@ -128,15 +128,20 @@ class ConfigParser( BaseObject ):
 	def __parse_binary( self, node, parent ):
 		binary = Binary( parent )
 
+		self.__parse_file( binary, node )
+		logging.debug( 'parsed one binary:'+str(binary) )
+		return binary
+
+	def __parse_file( self, bfile, node ):
 		for cnode in node.childNodes:
 			name = cnode.nodeName
 			if name == 'src':
-				binary.src = get_node_value( cnode )
+				bfile.src = get_node_value( cnode )
 			elif name == 'dst':
-				binary.dst = get_node_value( cnode )
+				bfile.dst = get_node_value( cnode )
+			elif name == 'dstfile':
+				bfile.dstfile = get_node_value( cnode )
 
-		logging.debug( 'parsed one binary:'+str(binary) )
-		return binary
 
 	def __parse_libs( self, node, parent ):
 		lblock = LibBlock(parent)
@@ -160,13 +165,7 @@ class ConfigParser( BaseObject ):
 	def __parse_library( self, node, parent ):
 		lib = Library( parent )
 
-		for cnode in node.childNodes:
-			name = cnode.nodeName
-			if name == 'src':
-				lib.src = get_node_value( cnode )
-			elif name == 'dst':
-				lib.dst = get_node_value( cnode )
-
+		self.__parse_file( lib, node )
 		logging.debug( 'parsed one library:'+str(lib) )
 		return lib
 

@@ -1,0 +1,8 @@
+version 1.1 2014/05/09-
+
+Bugs:
+1. add support running in SE
+2. make dst rules more strictly and acurately
+3. time_tag should export, or the sub-script won't get this variable
+
+Features:
