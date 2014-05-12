@@ -4,5 +4,8 @@ Bugs:
 1. add support running in SE
 2. make dst rules more strictly and acurately
 3. time_tag should export, or the sub-script won't get this variable
+4. not mount when the dst is not in '/sw'
+5. add strict parse control, should error and exit when any parsing error
+6. add strict parsing for input arguments
 
 Features:

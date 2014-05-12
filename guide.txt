@@ -1,0 +1,23 @@
+* sample run command:
+	#python genpatch.py -x config/sample.xml -o /ws/nbaoping/ads312b60/patch -c Telstra -v 3.1.2b60 -b "CSCun22018 CSCum62202" -d debug
+
+* usage
+command:
+	#python genpatch.py -x <config file> -o <out dir> -c <customer> -v <version> -b <bug list> [-d <debug level> -t <patch tag>]
+
+	all the arguments in the <> are required, all the arguments in [] are optional.
+
+	-x <config file>
+		the xml file used to define your patch
+	-o <out dir>
+		the directory where you want to put your generated patch package
+	-c <customer>
+		the customer that the patch is used for
+	-v <version>
+		the version that the patch is
+	-b <bug list>
+		the bug list that the patch fixes, use "" when there are several bugs
+	-d <debug level>
+		debug level for log output. it's optional, by default, it's INFO level
+	-t <patch tag>
+		the tag used to identify the file name, etc. it's optional, by default, it will use the time tag like '20140506'.

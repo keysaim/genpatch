@@ -34,7 +34,8 @@
 		</bins>
 		<libs>
 			<lib>
-				<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib</src>
+				<!--* single normal file path-->
+				<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib/libSRClient.so</src>
 				<!--* if you want to set a normal file as the dst, you must use the dstfile element-->
 				<!--* if you don't set any dst/dstfile element, it always use the /sw/unicorn/lib by default-->
 				<dstfile>/sw/unicorn/lib/libSRClient.so</dstfile>
