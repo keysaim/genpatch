@@ -1,15 +1,16 @@
 <patch>
 	<component>
+		<!--* the component name, it wil be used as the component directory name-->
 		<name>service-router</name>
 		<services>
-			<!--how long will it need wait for after stopping/starting the services, in seconds-->
+			<!--* how long will it need wait for after stopping/starting all the services, in seconds-->
 			<waitTime>20</waitTime>
 			<service>
-				<!--the service needs to be stopped before patch by nodemgr,-->
-				<!--and sometimes, you need point out the processes that need to-->
-				<!--be checked to make sure the service is stopped or started successfully-->
+				<!--* the service needs to be stopped before patch by nodemgr,-->
+				<!--	and sometimes, you need point out the processes that need to-->
+				<!--	be checked to make sure the service is really stopped or started successfully-->
 				<name>fmsserver</name>
-				<!--the process needs be checked-->
+				<!--the process needs be checked, it will use pidof to check it-->
 				<process>fmsedge</process>
 			</service>
 			<service>
@@ -28,7 +29,8 @@
 				<!--* where you patch your src files to-->
 				<!--* you must set a directory here, if you want to set a file path here, please-->
 				<!--	use the "dstfile" element instead-->
-				<!--* if you didn't set it, by default, it will use '/sw/unicorn/bin' as the dst directory-->
+				<!--* if you didn't add this element, by default, it will use '/sw/unicorn/bin'-->
+				<!--	as the dst directory-->
 				<dst>/sw/unicorn/bin</dst>
 			</bin>
 		</bins>
