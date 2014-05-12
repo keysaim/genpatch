@@ -4,6 +4,7 @@ import shutil
 
 from base import *
 
+STRICT_PARSE = True
 
 
 def __gen_stop_service_func( self, fout ):
@@ -191,6 +192,8 @@ class ServiceBlock( BaseObject ):
 				logging.debug( 'inited one service:'+str(service) )
 			else:
 				logging.error( 'invalid service'+str(service) )
+				if STRICT_PARSE:
+					return False
 
 		self.services = slist
 		return len(self.services) > 0
@@ -226,7 +229,7 @@ class Binary( BaseObject ):
 	def __init__( self, parent ):
 		self.src = None
 		self.dst = None
-		self.dstFile = None
+		self.dstfile = None
 
 
 class BinBlock( BaseObject ):
@@ -234,6 +237,7 @@ class BinBlock( BaseObject ):
 		self.defSrcDir = defSrcDir
 		self.defDstDir = defDstDir
 		self.binList = list()
+		self.isInSW = False
 
 	def add_binary( self, binary ):
 		self.binList.append( binary )
@@ -246,12 +250,21 @@ class BinBlock( BaseObject ):
 
 		bmap = dict()
 		for binary in self.binList:
-			self.__init_bin( bmap, binary )
+			if not self.__init_bin( bmap, binary ):
+				if STRICT_PARSE:
+					return False
 
 		self.binList = bmap.values()
 		if not self.binList or len(self.binList) == 0:
 			logging.error( 'no available binary set in this block:'+str(self) )
 			return False
+
+		#check if is in /sw
+		for binary in self.binList:
+			dst = binary.dst
+			if dst.startswith( '/sw' ):
+				self.isInSW = True
+				break
 
 		return True
 
@@ -261,15 +274,16 @@ class BinBlock( BaseObject ):
 			return False
 
 		dst = binary.dst
-		if dst is None:
-			dst = self.defDstDir
 
 		#if indicate the source files
 		if os.path.exists( src ):
 			if os.path.isfile(src):
+				if dst is None:
+					dst = self.defDstDir
+
 				bname = os.path.basename( src )
-				if binary.dstFile:
-					dst = binary.dstFile
+				if binary.dstfile:
+					dst = binary.dstfile
 				else:
 					dst = os.path.join( dst, bname )
 				binary.src = src
@@ -278,7 +292,7 @@ class BinBlock( BaseObject ):
 				logging.debug( 'inited one binary:'+str(binary) )
 			else:
 				if dst is None:
-					logging.error( 'you must set the dst element for binary:'+str(binary) )
+					logging.error( 'you must set the dst element for directory binary:'+str(binary) )
 					return False
 
 				#include many files here
@@ -288,7 +302,7 @@ class BinBlock( BaseObject ):
 						continue
 					
 					#the dst must be a directory
-					#we won't consider dstFile here, as the src is a directory
+					#we won't consider dstfile here, as the src is a directory
 					cdst = os.path.join( dst, fname )
 
 					subBin = Binary( self )
@@ -300,13 +314,16 @@ class BinBlock( BaseObject ):
 		#if not set the source files, it means only set the source name
 		#try to get the source file from the default directory
 		else:	
+			if dst is None:
+				dst = self.defDstDir
+
 			src = os.path.join( self.defSrcDir, src )
 			if not os.path.exists( src ):
 				logging.error( 'source file not exist:'+src )
 				return False
 
-			if binary.dstFile:
-				dst = binary.dstFile
+			if binary.dstfile:
+				dst = binary.dstfile
 			else:
 				dst = os.path.join( dst, bname )
 			binary.src = src
@@ -371,6 +388,7 @@ class Component( BaseObject ):
 		self.serviceBlock = None
 		self.binBlock = None
 		self.libBlock = None
+		self.isInSW = False
 
 		self.deviceMode = None
 		self.compDir = None
@@ -394,15 +412,23 @@ class Component( BaseObject ):
 			if not self.binBlock.init_config( self ):
 				logging.error( 'init binary block failed:'+str(self.binBlock) )
 				self.binBlock = None
+				if STRICT_PARSE:
+					return False
 			else:
 				logging.debug( 'inited one bin block:'+str(self.binBlock) )
+				if self.binBlock.isInSW:
+					self.isInSW = True
 
 		if self.libBlock:
 			if not self.libBlock.init_config( self ):
 				logging.error( 'init library block failed:'+str(self.libBlock) )
 				self.libBlock = None
+				if STRICT_PARSE:
+					return False
 			else:
 				logging.debug( 'inited one lib block:'+str(self.libBlock) )
+				if self.libBlock.isInSW:
+					self.isInSW = True
 
 		if not self.binBlock and not self.libBlock:
 			logging.error( 'no available binary file in this component:'+str(self) )
@@ -631,6 +657,9 @@ class Component( BaseObject ):
 		fout.write( lines )
 
 	def __gen_mount( self, fout, lhead, perm ):
+		if not self.isInSW:
+			return
+
 		lines  = lhead + 'mount -n -o remount,' + perm + ' /sw\n'
 		lines += lhead + 'if [ $? -ne 0 ]; then\n'
 		lines += lhead + '	echo "ERROR: unable to remount partition as ' + perm + ' mode"\n'
@@ -732,6 +761,8 @@ class Patcher( BaseObject ):
 				logging.debug( 'inited one component:'+str(comp) )
 			else:
 				logging.error( 'invalid component:'+str(comp) )
+				if STRICT_PARSE:
+					return False
 
 		self.compList = clist
 		return len(self.compList) > 0

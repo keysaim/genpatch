@@ -1,4 +1,5 @@
 import sys
+import re
 
 from base import *
 from configparser import *
@@ -10,11 +11,11 @@ class InputArgs( BaseObject ):
 	def __init__( self ):
 		self.configPath = None
 		self.debugMode = 'info'
-		self.customer = ''
-		self.version = ''
-		self.bugs = ''
+		self.customer = None
+		self.version = None
+		self.bugs = None
 		self.timeTag = None
-		self.outDir = './'
+		self.outDir = None
 
 	def parse_argv( self, argv ):
 		idx = 1
@@ -49,13 +50,48 @@ class InputArgs( BaseObject ):
 			else:
 				idx += 2
 
-		if not self.configPath:
+		if not self.__check_arguments():
 			logging.error( 'invalid input arguments' )
-			logging.error( 'config file must be setted\n' )
 			self.__print_usage()
 			return False
 
 		return True
+
+	def __check_arguments( self ):
+		if not self.configPath:
+			logging.error( 'config file must be set' )
+			return False
+
+		if not self.outDir:
+			logging.error( 'output directory must be set' )
+			return False
+
+		if not self.customer:
+			logging.error( 'customer must be set' )
+			return False
+
+		if not self.version:
+			logging.error( 'version must be set' )
+			return False
+		else:
+			if not self.__check_version( self.version ):
+				return False
+
+		if not self.bugs:
+			logging.error( 'bugs must be set' )
+			return False
+
+		return True
+
+	def __check_version( self, version ):
+		pt = r'\d(\.\d)+b\d'
+		res =  re.match( pt, version )
+
+		if not res:
+			logging.error( 'version format must be like: 3.1.2b60, not:'+version )
+			return False
+		return True
+
 						
 	def __print_usage( self ):
 		print 'Usage:'
