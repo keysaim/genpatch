@@ -850,7 +850,7 @@ class Patcher( BaseObject ):
 		lines += '# patch on ' + self.version + ' for ' + self.customer + '\n'
 		lines += '# cedets: ' + self.bugs + '\n'
 		lines += '\n'
-		lines += 'export customer="Telstra"\n'
+		lines += 'export customer="' + self.customer + '"\n'
 		lines += 'export target_version="' + self.version + '" # major(.)minor(.)maintenance(b)build\n'
 		lines += 'export version_tag="vds-is $target_version(For $customer)"\n'
 		lines += 'export time_tag="' + self.timeTag + '"\n'
