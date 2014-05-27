@@ -52,12 +52,88 @@ def __gen_start_service_func( self, fout ):
 
 	fout.write( lines )
 
+def gen_check_device_mode_func( fout, lhead ):
+	lines  = lhead + 'check_device_mode() {\n'
+	lines += lhead + '	local setMode="$1"\n'
+	lines += lhead + '    local device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk \'{ print $4 }\')\n'
+	lines += lhead + '    if [[ "$device_mode" = "$setMode" ]]; then\n'
+	lines += lhead + '        echo "Current device mode $device_mode"\n'
+	lines += lhead + '	   return 1	\n'
+	lines += lhead + '    else\n'
+	lines += lhead + '        #echo "Patch is not allowed to install in $device_mode"\n'
+	lines += lhead + '        return 0\n'
+	lines += lhead + '    fi\n'
+	lines += lhead + '}\n'
+	
+	fout.write( lines )
+	
+def gen_check_service_func( fout, lhead ):
+	lines  = lhead + 'function check_service(){\n'
+	lines += lhead + '	local cmd="$1"\n'
+	lines += lhead + '	local gstr="$2"\n'
+	lines += lhead + '	ret=`/sw/merlot/bin/runExecCLI $cmd | grep "$gstr"`\n'
+	lines += lhead + '	echo "$ret"\n'
+	lines += lhead + '	if [ -z "$ret" ]; then\n'
+	lines += lhead + '		return 0\n'
+	lines += lhead + '	else\n'
+	lines += lhead + '		return 1\n'
+	lines += lhead + '	fi\n'
+	lines += lhead + '}\n\n'
+
+	fout.write( lines )
+
+def gen_check_proc_started( fout, lhead, proc, svc=None ):
+	lines = ''
+	lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	lines += lhead + 'if [ -z "$ret" ]; then\n'
+	if svc:
+		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed in service:' + svc + '"\n'
+	else:
+		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed"\n'
+	lines += lhead + '	echo "Please run patch revert and then check the ' + proc + ' proccess."\n'
+	lines += lhead + '	exit 26\n'
+	lines += lhead + 'else\n'
+	lines += lhead + '	echo "Process ' + proc + ' started, go on..."\n'
+	lines += lhead + 'fi\n\n'
+	fout.write( lines )
+
+def gen_check_proc_stopped( fout, lhead, proc, svc=None ):
+	lines = ''
+	lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	lines += lhead + 'if [ -z "$ret" ]; then\n'
+	lines += lhead + '	echo "Process ' + proc + ' stopped, go on..."\n'
+	lines += lhead + 'else\n'
+	if svc:
+		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed in service:' + svc + '"\n'
+	else:
+		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed"\n'
+	lines += lhead + '	echo "Please check the ' + proc + ' process and retry the patch later."\n'
+	lines += lhead + '	exit 25\n'
+	lines += lhead + 'fi\n\n'
+	fout.write( lines )
+
+class ServiceCheck( BaseObject ):
+	def __init__( self, parent ):
+		self.cli = None
+		self.enable = None
+		self.disable = None
+	
+	def init_config( self, parent ):
+		if not self.cli:
+			return False
+
+		if not self.enale and not self.disable:
+			return False
+
+		return True
+
 
 class Service( BaseObject ):
 	def __init__( self, parent ):
 		self.name = None
 		self.waitTime = parent.waitTime
 		self.processList = None
+		self.check = None
 
 	def add_process( self, process ):
 		if self.processList is None:
@@ -73,46 +149,54 @@ class Service( BaseObject ):
 		return True
 
 	def gen_start( self, fout, lhead ):
-		lines  = lhead + '/ruby/bin/nodemgr_clt start ' + self.name + '\n'
+		lines = ''
+		if self.check:
+			lines += lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
+			lines += lhead + 'echo "starting service:' + self.name + '..."\n'
+			lines += lhead + '	/ruby/bin/nodemgr_clt start ' + self.name + '\n'
+			lines += lhead + 'fi\n'
+		else:
+			lines += lhead + 'echo "starting service:' + self.name + '..."\n'
+			lines += lhead + '/ruby/bin/nodemgr_clt start ' + self.name + '\n'
+		fout.write( lines )
+
+	def gen_check_service( self, fout, lhead ):
+		lines = ''
+		if self.check:
+			lines += lhead + 'echo "check service:' + self.name + '"...\n'
+			cstr = self.check.enable
+			if not cstr:
+				cstr = self.check.disable
+			lines += lhead + 'check_service "' + self.check.cli + '" "' + cstr + '"\n'
+			if self.check.enable:
+				lines += lhead + self.name + '_enable=$?\n'
+			else:
+				lines += lhead + self.name + '_enable=$((1-$?))\n'
+			lines += lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
+			lines += lhead + '	echo "' + self.name + ' is enabled"\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "' + self.name + ' is disabled"\n'
+			lines += lhead + 'fi\n'
+
 		fout.write( lines )
 
 	def gen_stop( self, fout, lhead ):
-		lines  = lhead + '/ruby/bin/nodemgr_clt stop ' + self.name + '\n'
+		lines  = ''
+		lines += lhead + 'echo "stopping service:' + self.name + '..."\n'
+		lines += lhead + '/ruby/bin/nodemgr_clt stop ' + self.name + '\n'
 		fout.write( lines )
 
 	def gen_check_started( self, fout, lhead ):
 		if not self.processList:
 			return
-		lines = ''
 		for proc in self.processList:
-			lines += lhead + 'local tarproc=' + proc + '\n'
-			lines += lhead + 'pidof $tarproc > /dev/null\n'
-			lines += lhead + 'local pidof_rc=$?\n'
-			lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
-			lines += lhead + '	echo "Process $tarproc started, go on..."\n'
-			lines += lhead + 'else\n'
-			lines += lhead + '	echo "ERROR: $tarproc retarting failed in service:' + self.name + '"\n'
-			lines += lhead + '	echo "Please run patch revert and then check the $tarproc proccess."\n'
-			lines += lhead + '	exit 26\n'
-			lines += lhead + 'fi\n'
-		fout.write( lines )
+			gen_check_proc_started( fout, lhead, proc, self.name )
 
 	def gen_check_stopped( self, fout, lhead ):
 		if not self.processList:
 			return
-		lines = ''
 		for proc in self.processList:
-			lines += lhead + 'local tarproc=' + proc + '\n'
-			lines += lhead + 'pidof $tarproc > /dev/null\n'
-			lines += lhead + 'local pidof_rc=$?\n'
-			lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
-			lines += lhead + '	echo "ERROR: process $tarproc not stopped in service:' + self.name + '"\n'
-			lines += lhead + '	echo "Please check the $tarproc process and retry the patch later."\n'
-			lines += lhead + '	exit 25\n'
-			lines += lhead + 'else\n'
-			lines += lhead + '	echo "Process $tarproc stopped, go on..."\n'
-			lines += lhead + 'fi\n'
-		fout.write( lines )
+			gen_check_proc_stopped( fout, lhead, proc, self.name )
 
 
 class Process( BaseObject ):
@@ -139,35 +223,18 @@ class Process( BaseObject ):
 		lines  = lhead + self.startCmd + '\n'
 		fout.write( lines )
 
+	def gen_check_service( self, fout, lhead ):
+		pass
+
 	def gen_stop( self, fout, lhead ):
 		lines  = lhead + self.stopCmd + '\n'
 		fout.write( lines )
 
 	def gen_check_started( self, fout, lhead ):
-		lines  = lhead + 'local tarproc=' + self.name + '\n'
-		lines += lhead + 'pidof $tarproc > /dev/null\n'
-		lines += lhead + 'local pidof_rc=$?\n'
-		lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
-		lines += lhead + '	echo "Process started, go on..."\n'
-		lines += lhead + 'else\n'
-		lines += lhead + '	echo "ERROR: $tarsvc retarting failed "\n'
-		lines += lhead + '	echo "Please run patch revert and then check the $tarsvc proccess."\n'
-		lines += lhead + '	exit 26\n'
-		lines += lhead + 'fi\n'
-		fout.write( lines )
+		gen_check_proc_started( fout, lhead, self.name )
 
 	def gen_check_stopped( self, fout, lhead ):
-		lines  = lhead + 'local tarproc=' + self.name + '\n'
-		lines += lhead + 'pidof $tarproc > /dev/null\n'
-		lines += lhead + 'local pidof_rc=$?\n'
-		lines += lhead + 'if [ $pidof_rc -eq 0 ]; then\n'
-		lines += lhead + '	echo "ERROR: process $tarproc not stopped "\n'
-		lines += lhead + '	echo "Please check the $tarproc process and retry the patch later."\n'
-		lines += lhead + '	exit 25\n'
-		lines += lhead + 'else\n'
-		lines += lhead + '	echo "Process stopped, go on..."\n'
-		lines += lhead + 'fi\n'
-		fout.write( lines )
+		gen_check_proc_stopped( fout, lhead, self.name )
 
 
 class ServiceBlock( BaseObject ):
@@ -199,25 +266,38 @@ class ServiceBlock( BaseObject ):
 		return len(self.services) > 0
 
 	def gen_start( self, fout, lhead ):
-		lines = lhead + 'echo "trying start services..."\n'
+		lines = lhead + 'echo "try starting services..."\n'
 		fout.write( lines )
-		for (service, isSer) in self.services:
+		idx = len(self.services) - 1
+		while idx >= 0:
+			(service, isSer) = self.services[idx]
+			idx -= 1
 			service.gen_start( fout, lhead )
 
 		lines  = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines += lhead + 'echo ""\n'
+		lines += lhead + 'echo ""\n'
 		lines += lhead + 'echo "checking if services started..."\n'
 		fout.write( lines )
 
-		for (service, isSer) in self.services:
+		idx = len(self.services) - 1
+		while idx >= 0:
+			(service, isSer) = self.services[idx]
+			idx -= 1
 			service.gen_check_started( fout, lhead )
 	
 	def gen_stop( self, fout, lhead ):
-		lines = lhead + 'echo "trying stop services..."\n'
+		for (service, isSer) in self.services:
+			service.gen_check_service( fout, lhead )
+
+		lines = lhead + 'echo "try stopping services..."\n'
 		fout.write( lines )
 		for (service, isSer) in self.services:
 			service.gen_stop( fout, lhead )
 
 		lines  = lhead + 'sleep ' + str(self.waitTime) + '\n'
+		lines += lhead + 'echo ""\n'
+		lines += lhead + 'echo ""\n'
 		lines += lhead + 'echo "checking if services stopped..."\n'
 		fout.write( lines )
 
@@ -230,6 +310,7 @@ class Binary( BaseObject ):
 		self.src = None
 		self.dst = None
 		self.dstfile = None
+		self.itype = None
 
 
 class BinBlock( BaseObject ):
@@ -238,6 +319,7 @@ class BinBlock( BaseObject ):
 		self.defDstDir = defDstDir
 		self.binList = list()
 		self.isInSW = False
+		self.specialList = None
 
 	def add_binary( self, binary ):
 		self.binList.append( binary )
@@ -308,6 +390,7 @@ class BinBlock( BaseObject ):
 					subBin = Binary( self )
 					subBin.src = fpath
 					subBin.dst = cdst
+					subBin.itype = binary.itype
 					bmap[cdst] = subBin
 					logging.debug( 'inited one sub binary:'+str(subBin) )
 
@@ -336,7 +419,12 @@ class BinBlock( BaseObject ):
 	def gen_file_vars( self, fout, lhead, offset ):
 		lines = ''
 		idx = offset
+		self.specialList = list()
 		for bnry in self.binList:
+			if bnry.itype:
+				#this is special binary, need special way to install it
+				self.specialList.append( bnry )
+
 			lines += lhead + 'source_file' + str(idx) + '="' + bnry.src + '"\n'
 			lines += lhead + 'target_file' + str(idx) + '="' + bnry.dst + '"\n'
 			lines += lhead + 'backup_file' + str(idx) + '="' + bnry.dst + '-${time_tag}-bak"\n\n'
@@ -345,6 +433,88 @@ class BinBlock( BaseObject ):
 		fout.write( lines )
 		return idx - offset
 
+	def gen_special_apply( self, fout, lhead ):
+		if not self.specialList:
+			return
+
+		for bnry in self.specialList:
+			if bnry.itype == 'kofile':
+				lines = lhead + 'echo ""\n'
+				lines += lhead + 'echo "applying kofile:' + bnry.src + '..."\n'
+				fout.write( lines )
+				self.__gen_kofile( fout, lhead, bnry.src, bnry.dst )
+
+	def gen_special_revert( self, fout, lhead ):
+		if not self.specialList:
+			return
+
+		for bnry in self.specialList:
+			if bnry.itype == 'kofile':
+				lines = lhead + 'echo ""\n'
+				lines += lhead + 'echo "\nreverting kofile:' + bnry.src + '..."\n'
+				fout.write( lines )
+				self.__gen_kofile( fout, lhead, bnry.dst, bnry.dst )
+
+	def __gen_kodir( self, fout, lhead, dst ):
+		idx = dst.rfind( '/' )
+		kodir = dst[0:idx]
+		lines  = lhead + 'kodir=' + kodir + '\n'
+		lines += lhead + 'if [ ! -d $kodir ];then\n'
+		lines += lhead + '	mkdir -p $kodir\n'
+		lines += lhead + 'fi\n\n'
+		fout.write( lines )
+
+	def __gen_kofile( self, fout, lhead, src, dst ):
+		bname = os.path.basename( src )
+		koname = bname.split( '.' )[0]
+		logging.info( 'gen ko:'+koname )
+
+		self.__gen_kodir( fout, lhead, dst )
+
+		lines  = lhead + '#check the used part of ' + koname + ', must be 0 before patching\n'
+		lines += lhead + 'echo "Check if the ' + koname + ' used is 0 ..."\n'
+		lines += lhead + 'lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + '\n'
+		lines += lhead + 'used=`lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + ' | awk \'{print $3}\'`\n'
+		lines += lhead + 'if [ ! -z "$used" ]; then\n'
+		lines += lhead + '	if [ "$used" != "0" ]; then\n'
+		lines += lhead + '		echo "Fatal error, the ' + koname + ' is still being used, cannot patch"\n'
+		lines += lhead + '		exit 1\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + '	#only remove when it exists\n'
+		lines += lhead + '	`rmmod ' + koname + '`;\n'
+		lines += lhead + '	status=$?\n'
+		lines += lhead + '	if [ $status -ne 0 ]; then\n'
+		lines += lhead + '		echo "Fatal error, rmmod ' + koname + ' failed"\n'
+		lines += lhead + '		exit $status\n'
+		lines += lhead + '	fi\n'
+		lines += lhead + 'fi\n'
+		lines += lhead + '\n'
+		lines += lhead + '#check ' + koname + ', no any more\n'
+		lines += lhead + 'echo "Check if the ' + koname + ' is removed ..."\n'
+		lines += lhead + 'lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + '\n'
+		lines += lhead + 'used=`lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + ' | awk \'{print $3}\'`\n'
+		lines += lhead + 'if [ ! -z "$used" ]; then\n'
+		lines += lhead + '	echo "Fatal error, failed to remove the ' + koname + ', cannot patch"\n'
+		lines += lhead + '	exit 1\n'
+		lines += lhead + 'fi\n'
+		lines += lhead + '\n'
+		lines += lhead + '`insmod ' + src + '`;\n'
+		lines += lhead + 'status=$?\n'
+		lines += lhead + 'if [ $status -ne 0 ]; then\n'
+		lines += lhead + '	echo "Fatal error, insmod ' + koname + ' failed"\n'
+		lines += lhead + '	exit $status\n'
+		lines += lhead + 'fi\n'
+		lines += lhead + '\n'
+		lines += lhead + '#check ' + koname + ' again, appear\n'
+		lines += lhead + 'echo "Check if the ' + koname + ' is inserted ..."\n'
+		lines += lhead + 'lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + '\n'
+		lines += lhead + 'used=`lsmod | awk \'{print $1, $2, $3}\' | grep ' + koname + ' | awk \'{print $3}\'`\n'
+		lines += lhead + 'if [ -z "$used" ]; then\n'
+		lines += lhead + '	echo "Fatal error, failed to insert the ' + koname + ', patch failed"\n'
+		lines += lhead + '	exit 1\n'
+		lines += lhead + 'fi\n\n'
+
+		fout.write( lines )
 
 	def gen_sanity_check( self, fout, lhead ):
 		total = len(self.binList)
@@ -385,6 +555,7 @@ class LibBlock( BinBlock ):
 class Component( BaseObject ):
 	def __init__( self, parent ):
 		self.name = None
+		self.deviceList = None
 		self.serviceBlock = None
 		self.binBlock = None
 		self.libBlock = None
@@ -400,6 +571,18 @@ class Component( BaseObject ):
 		if self.name is None:
 			logging.error( 'component name not set:'+str(self) )
 			return False
+
+		if self.deviceList:
+			nlist = list()
+			for de in self.deviceList:
+				if de == 'se':
+					de = 'service-engine'
+				elif de == 'sr':
+					de = 'service-router'
+				elif de == 'cdsm':
+					de = 'content-delivery-system-manager'
+				nlist.append( de )
+			self.deviceList = nlist
 
 		if self.serviceBlock:
 			if not self.serviceBlock.init_config( self ):
@@ -456,6 +639,10 @@ class Component( BaseObject ):
 		fout = open( spath, 'w' )
 
 		self.__gen_head( fout )
+		fout.write( '\n' )
+		gen_check_device_mode_func( fout, '' )
+		fout.write( '\n' )
+		gen_check_service_func( fout, '' )
 		fout.write( '\n' )
 		self.__gen_apply_func( fout )
 		fout.write( '\n' )
@@ -635,17 +822,29 @@ class Component( BaseObject ):
 		fout.write( lines )
 
 	def __gen_check_device_mode( self, fout, lhead ):
-		if self.deviceMode:
-			lines  = ''
-			lines += lhead + '##### check device mode\n'
-			lines += lhead + 'device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk \'{ print $4 }\')\n'
-			lines += lhead + 'if [[ "$device_mode" = "' + self.deviceMode + '" ]]; then\n'
-			lines += lhead + '	echo "current device mode is $device_mode"\n'
-			lines += lhead + 'else\n'
-			lines += lhead + '	echo "patch can only be applied to $device_mode, aborting."\n'
-			lines += lhead + '	return 0 #it returns 0 here to show a friendly result\n'
-			lines += lhead + 'fi\n'
-			fout.write( lines )
+		if not self.deviceList:
+			return
+		lines  = ''
+		lines += lhead + 'echo ""\n'
+		lines += lhead + 'local isRightMode=0\n'
+		lines += lhead + 'local allowMode=0\n'
+		lines += lhead + 'echo "checking device mode, allowed:' + str(self.deviceList) + '"\n'
+		for de in self.deviceList:
+			lines += lhead + 'if [ $isRightMode -eq 0 ]; then\n'
+			lines += lhead + '	check_device_mode "' + de + '"\n'
+			lines += lhead + '	isRightMode=$?\n'
+			lines += lhead + '	if [ $isRightMode -eq 1 ]; then\n'
+			lines += lhead + '		echo "patch will install for ' + de + '"\n'
+			lines += lhead + '		allowMode=1\n'
+			lines += lhead + '	fi\n'	
+			lines += lhead + 'fi\n'	
+
+		lines += lhead + 'if [ $allowMode -eq 0 ]; then\n'
+		lines += lhead + '	echo "patch is not allowed for this device mode"\n'
+		lines += lhead + '	/ruby/bin/exec -c "show device-mode current"\n'
+		lines += lhead + '	exit 44\n'
+		lines += lhead + 'fi\n'
+		fout.write( lines )
 	
 	def __gen_check_md5sum( self, fout, lhead ):
 		lines  = lhead + 'md5sum --status -c $md5sum_file\n'
@@ -683,7 +882,14 @@ class Component( BaseObject ):
 		lines += lhead + '	cp -f $source_file $target_file\n'
 		lines += lhead + '	chmod a+x $target_file\n'
 		lines += lhead + 'done\n'
-		lines += lhead + 'echo "Patch files copied."\n'
+		fout.write( lines )
+
+		if self.binBlock:
+			self.binBlock.gen_special_apply( fout, lhead )
+		if self.libBlock:
+			self.libBlock.gen_special_apply( fout, lhead )
+
+		lines  = lhead + 'echo "Patch files installed."\n'
 		lines += lhead + 'sleep 10\n'
 		fout.write( lines )
 
@@ -701,7 +907,14 @@ class Component( BaseObject ):
 		lines += lhead + '	mv -f $backup_file $target_file\n'
 		lines += lhead + '	chmod a+x $target_file\n'
 		lines += lhead + 'done\n'
-		lines += lhead + 'echo "Patch files reverted."\n'
+		fout.write( lines )
+
+		if self.binBlock:
+			self.binBlock.gen_special_revert( fout, lhead )
+		if self.libBlock:
+			self.libBlock.gen_special_revert( fout, lhead )
+
+		lines  = lhead + 'echo "Patch files reverted."\n'
 		lines += lhead + 'sleep 10\n'
 		fout.write( lines )
 
@@ -848,7 +1061,7 @@ class Patcher( BaseObject ):
 	def __gen_head( self, fout ):
 		lines  = '#!/bin/sh\n'
 		lines += '# patch on ' + self.version + ' for ' + self.customer + '\n'
-		lines += '# cedets: ' + self.bugs + '\n'
+		lines += '# CDETS: ' + self.bugs + '\n'
 		lines += '\n'
 		lines += 'export customer="' + self.customer + '"\n'
 		lines += 'export target_version="' + self.version + '" # major(.)minor(.)maintenance(b)build\n'

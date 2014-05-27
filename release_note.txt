@@ -1,3 +1,14 @@
+
+version 1.2 2014/05/27
+Features:
+1. support kofiles patch
+2. support device mode setting
+3. support service status check
+
+
+------------------------------------------------------------------------------------------
+
+
 version 1.1.1 2014/05/14
 Bugs:
 1. set customer wrong, always Telstra

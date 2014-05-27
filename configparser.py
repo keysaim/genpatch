@@ -70,9 +70,26 @@ class ConfigParser( BaseObject ):
 			elif name == 'process':
 				process = get_node_value( cnode )
 				service.add_process( process )
+			elif name == 'check':
+				service.check = self.__parse_svc_check( cnode, node )
 
 		logging.debug( 'parsed one service:'+str(service) )
 		return service
+
+	def __parse_svc_check( self, node, parent ):
+		check = ServiceCheck( parent )
+
+		for cnode in node.childNodes:
+			name = cnode.nodeName
+			if name == 'cli':
+				check.cli = get_node_value( cnode )
+			elif name == 'enable':
+				check.enable = get_node_value( cnode )
+			elif name == 'disable':
+				check.disable = get_node_value( cnode )
+		
+		logging.debug( 'parsed one service check:'+str(check) )
+		return check
 
 	def __parse_process( self, node, parent ):
 		process = Process( parent )
@@ -96,6 +113,16 @@ class ConfigParser( BaseObject ):
 			name = cnode.nodeName
 			if name == 'name':
 				comp.name = get_node_value( cnode )
+			elif name == 'device':
+				dstr = get_node_value( cnode ).lower().strip()
+				comp.deviceList = list()
+				for seg in dstr.split( ',' ):
+					de = seg.strip()
+					if de:
+						comp.deviceList.append( de )
+				if not comp.deviceList:
+					comp.deviceList = None
+
 			elif name == 'bins':
 				comp.binBlock = self.__parse_bins( cnode, comp )
 			elif name == 'libs':
@@ -141,6 +168,8 @@ class ConfigParser( BaseObject ):
 				bfile.dst = get_node_value( cnode )
 			elif name == 'dstfile':
 				bfile.dstfile = get_node_value( cnode )
+			elif name == 'type':
+				bfile.itype = get_node_value( cnode )
 
 
 	def __parse_libs( self, node, parent ):

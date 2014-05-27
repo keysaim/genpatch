@@ -1,0 +1,58 @@
+<patch>
+	<component>
+		<!--* the component name, it wil be used as the component directory name-->
+		<name>ko</name>
+		<!--* set the device mode to allow the patch-->
+		<!--* if the patch is used for mutiple modes, you can set like this: se,sr,cdsm-->
+		<device>se</device>
+		<services>
+			<!--* how long will it need wait for after stopping/starting all the services, in seconds-->
+			<waitTime>20</waitTime>
+			<service>
+				<name>bandwd</name>
+				<process>bandwd</process>
+			</service>
+			<service>
+				<name>wmt_ml</name>
+				<!--* if set the check element, if will check if the service is enabled to decide-->
+				<!--	if it needs to start the service or not-->
+				<check>
+					<!--* the cli is used to check the service status-->
+					<cli>sh wmt</cli>
+					<!--* the keyword string that is used to check if the service is enabled-->
+					<enable>WMT is enabled</enable>
+				</check>
+			</service>
+			<service>
+				<name>wmt_core</name>
+				<process>wmt_</process>
+				<check>
+					<cli>sh wmt</cli>
+					<enable>WMT is enabled</enable>
+				</check>
+			</service>
+			<service>
+				<name>sbss</name>
+				<process>Darwin</process>
+				<check>
+					<cli>sh movie-streamer</cli>
+					<!--* the keyword string that is used to check if the service is disabled-->
+					<disable>Movie Streamer is not enabled</disable>
+				</check>
+			</service>
+			<service>
+				<name>webengine</name>
+				<process>web-engine</process>
+			</service>
+		</services>
+		<bins>
+			<bin>
+				<src>/home/neil/cdsis/tools/tmp</src>
+				<dst>/lib/modules/2.6.32.28-cds-64/cisco</dst>
+				<!--* set the file type, by default it's normal files that will be installed only by copying-->
+				<!--* if set to 'kofile', the source files will be installed as ko modules-->
+				<type>kofile</type>
+			</bin>
+		</bins>
+	</component>
+</patch>
