@@ -1,4 +1,11 @@
 
+version 1.2.1 2014/05/27
+Bugs:
+1. must check if service enable before checking process restarted
+
+
+------------------------------------------------------------------------------------------
+
 version 1.2 2014/05/27
 Features:
 1. support kofiles patch
