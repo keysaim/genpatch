@@ -189,14 +189,18 @@ class Service( BaseObject ):
 	def gen_check_started( self, fout, lhead ):
 		if not self.processList:
 			return
-
-		lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
-		fout.write( lines )
+		
+		ihead = lhead
+		if self.check:
+			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
+			fout.write( lines )
+			ihead += '\t'
 		for proc in self.processList:
-			gen_check_proc_started( fout, lhead+'\t', proc, self.name )
+			gen_check_proc_started( fout, ihead, proc, self.name )
 
-		lines = lhead + 'fi\n'
-		fout.write( lines )
+		if self.check:
+			lines = lhead + 'fi\n'
+			fout.write( lines )
 
 	def gen_check_stopped( self, fout, lhead ):
 		if not self.processList:
