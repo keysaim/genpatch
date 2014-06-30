@@ -762,7 +762,7 @@ class Component( BaseObject ):
 		lines += lhead + '	file_to_check=target_file$i\n'
 		lines += lhead + '	file_to_check=${!file_to_check}\n'
 		lines += lhead + '	filename_nopath=$(echo "$file_to_check" | sed "s/.*\/\(.\+\)$/\\1/")\n'
-		lines += lhead + '	expected_md5=$(grep $filename_nopath $md5sum_file | awk \'{ print $1 }\')\n'
+		lines += lhead + '	expected_md5=$(grep "/$filename_nopath$" $md5sum_file | awk \'{ print $1 }\')\n'
 		lines += lhead + '	patched_md5=$(md5sum "$file_to_check" | awk \'{ print $1 }\')\n'
 		lines += lhead + '	\n'
 		lines += lhead + '	echo "Actual checksum is   $patched_md5 for target file $file_to_check."\n'
