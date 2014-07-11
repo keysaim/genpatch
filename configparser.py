@@ -34,6 +34,17 @@ class ConfigParser( BaseObject ):
 				comp = self.__parse_component( cnode, node )
 				logging.debug( 'one component parsed:'+str(comp) )
 				patcher.add_component( comp )
+			elif name == 'reload':
+				value = get_node_value( cnode )
+				if value == 'true':
+					patcher.needReload = True
+				else:
+					patcher.needReload = False
+				logging.debug( "parsed reload node:"+value )
+			elif name == 'warn':
+				value = get_node_value( cnode )
+				patcher.warn = value
+				logging.debug( "parsed warn node:"+value )
 
 		return patcher
 

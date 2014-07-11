@@ -1,4 +1,17 @@
 
+version 1.2.3 2014/06/30
+Features:
+1. add reload support
+	when set the reload element, it will give a reload warning before patch. And will do reload after patch
+2. add warn support
+	when set the warning, it will give a warning before patch, if select no, patch will abort
+
+Bugs:
+1. patch verify failed when some src file is substring of other src file
+
+
+------------------------------------------------------------------------------------------
+
 version 1.2.2 2014/05/27
 Bugs:
 1. if service not set check, no need check service enable

@@ -963,6 +963,8 @@ class Patcher( BaseObject ):
 		self.outDir = './'
 
 		self.packageDir = None
+		self.needReload = False
+		self.warn = None
 		self.serviceBlock = None
 		self.compList = list()
 
@@ -1027,6 +1029,12 @@ class Patcher( BaseObject ):
 
 		self.__gen_head( fout )
 		fout.write( '\n' )
+		if self.needReload:
+			self.__gen_reload_warning_func( fout )
+			fout.write( '\n' )
+		if self.warn:
+			self.__gen_warning_func( fout )
+			fout.write( '\n' )
 		self.__gen_uncompress_func( fout )
 		fout.write( '\n' )
 		self.__gen_validate_func( fout )
@@ -1103,7 +1111,46 @@ class Patcher( BaseObject ):
 		lines += 'total_scripts=' + str(idx) + '\n'
 		lines += '\n\n'
 		fout.write( lines )
-			
+		
+	def __gen_reload_warning_func( self, fout ):
+		lines  = 'reload_warning() {\n'
+		lines += '	local yn=""\n'
+		lines += '	while [ "$yn" != "y" ] && [ "$yn" != "Y" ] && [ "$yn" != "n" ] && [ "$yn" != "N" ]\n'
+		lines += '	do\n'
+		lines += '		read -p "May reboot this device in processing, please offload the device, continue? [y/n]: " yn\n'
+		lines += '	done\n'
+		lines += '	echo\n'
+		lines += '	if [ "$yn" == "n" ] || [ "$yn" == "N" ]; then\n'
+		lines += '		echo "Abort."\n'
+		lines += '		exit 101\n'
+		lines += '	fi\n'
+		lines += '}\n'
+		fout.write( lines )
+	
+	def __get_reload_code( self, fout, lhead ):
+		lines  = lhead + '##### 4. reload device\n'
+		lines += lhead + 'echo "reload device..."\n'
+		lines += lhead + '/ruby/bin/exec -c "reload"\n'
+		lines += lhead + 'echo\n'
+		lines += lhead + 'echo\n'
+		lines += lhead + 'echo "********Please reload manually!********"\n'
+		return lines
+
+	def __gen_warning_func( self, fout ):
+		lines  = 'patch_warning() {\n'
+		lines += '	local yn=""\n'
+		lines += '	while [ "$yn" != "y" ] && [ "$yn" != "Y" ] && [ "$yn" != "n" ] && [ "$yn" != "N" ]\n'
+		lines += '	do\n'
+		lines += '		read -p "' + self.warn + ', continue? [y/n]:" yn\n'
+		lines += '	done\n'
+		lines += '	echo\n'
+		lines += '	if [ "$yn" == "n" ] || [ "$yn" == "N" ]; then\n'
+		lines += '		echo "Abort."\n'
+		lines += '		exit 102\n'
+		lines += '	fi\n'
+		lines += '}\n'
+		fout.write( lines )
+
 	def __gen_uncompress_func( self, fout ):
 		lines  = 'package_uncompress() {\n'
 		lines += '	\n'
@@ -1156,6 +1203,10 @@ class Patcher( BaseObject ):
 		lines += '		exit 23\n'
 		lines += '	fi\n'
 		lines += '	\n'
+		if self.needReload:
+			lines += '	reload_warning\n'
+		if self.warn:
+			lines += '	patch_warning\n'
 		lines += '	echo "Uncompressing package file..."\n'
 		lines += '	package_uncompress\n'
 		lines += '	echo "Package file uncompressed."\n'
@@ -1174,6 +1225,8 @@ class Patcher( BaseObject ):
 		lines += '	echo "" \n'
 		lines += '	if [[ $ret -eq 0 ]]; then\n'
 		lines += '		echo "Patch apply succeeded for all applicable modules."\n'
+		if self.needReload:
+			lines += self.__get_reload_code( fout, '\t\t' )
 		lines += '	else\n'
 		lines += '		echo "Patch apply succeeded for only some of the module(s), code $ret."\n'
 		lines += '		echo "Please refer to above details to examine which module(s) failed/succeeded."\n'
@@ -1189,6 +1242,10 @@ class Patcher( BaseObject ):
 		lines += '	echo "## Patch revert for $version_tag"\n'
 		lines += '	echo "############################################################"\n'
 		lines += '	\n'
+		if self.needReload:
+			lines += '	reload_warning\n'
+		if self.warn:
+			lines += '	patch_warning\n'
 		lines += '	scripts_validate\n'
 		lines += ' \n'
 		lines += '	ret=0\n'
@@ -1204,6 +1261,8 @@ class Patcher( BaseObject ):
 		lines += '	echo ""\n'
 		lines += '	if [[ $ret -eq 0 ]]; then\n'
 		lines += '		echo "Patch revert succeeded for all applicable modules."\n'
+		if self.needReload:
+			lines += self.__get_reload_code( fout, '\t\t' )
 		lines += '	else\n'
 		lines += '		echo "Patch revert succeeded for only some of the module(s), code $ret."\n'
 		lines += '		echo "Please refer to above details to examine which module(s) failed/succeeded."\n'
