@@ -1250,8 +1250,6 @@ class Patcher( BaseObject ):
 		lines += '	\n'
 		if self.needReload:
 			lines += '	reload_warning\n'
-		if self.warn:
-			lines += '	patch_warning\n'
 		lines += '	scripts_validate\n'
 		lines += ' \n'
 		lines += '	ret=0\n'

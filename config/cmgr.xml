@@ -1,7 +1,7 @@
 <patch>
 	<!--* if set reload and reload is true, it will warn reloadign before patch and will reload after patch -->
 	<reload>true</reload>
-	<!--* if set the warn message, it will give the warning before patch and ask for y/n, if select n, the script will abort -->
+	<!--* if set the warn message, it will give the warning before patch apply and ask for y/n, if select n, the script will abort -->
 	<warn>check if old patch applied</warn>
 	<component>
 		<!--* the component name, it wil be used as the component directory name-->
