@@ -82,14 +82,17 @@ def gen_check_service_func( fout, lhead ):
 
 	fout.write( lines )
 
-def gen_check_proc_started( fout, lhead, proc, svc=None ):
+def gen_check_proc_started( fout, lhead, proc, isKeyword, svc=None ):
 	lines = ''
-	lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	if isKeyword:
+		lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	else:
+		lines += lhead + 'ret=`pidof ' + proc + '`\n'
 	lines += lhead + 'if [ -z "$ret" ]; then\n'
 	if svc:
-		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed in service:' + svc + '"\n'
+		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed in service:' + svc + ' with ret:$ret"\n'
 	else:
-		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed"\n'
+		lines += lhead + '	echo "ERROR: ' + proc + ' retarting failed with ret:$ret"\n'
 	lines += lhead + '	echo "Please run patch revert and then check the ' + proc + ' proccess."\n'
 	lines += lhead + '	exit 26\n'
 	lines += lhead + 'else\n'
@@ -97,16 +100,19 @@ def gen_check_proc_started( fout, lhead, proc, svc=None ):
 	lines += lhead + 'fi\n\n'
 	fout.write( lines )
 
-def gen_check_proc_stopped( fout, lhead, proc, svc=None ):
+def gen_check_proc_stopped( fout, lhead, proc, isKeyword, svc=None ):
 	lines = ''
-	lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	if isKeyword:
+		lines += lhead + 'ret=`ps aux | grep "' + proc + '" | grep -v "grep"`\n'
+	else:
+		lines += lhead + 'ret=`pidof ' + proc + '`\n'
 	lines += lhead + 'if [ -z "$ret" ]; then\n'
 	lines += lhead + '	echo "Process ' + proc + ' stopped, go on..."\n'
 	lines += lhead + 'else\n'
 	if svc:
-		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed in service:' + svc + '"\n'
+		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed in service:' + svc + ' with ret:$ret"\n'
 	else:
-		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed"\n'
+		lines += lhead + '	echo "ERROR: ' + proc + ' stopping failed with ret:$ret"\n'
 	lines += lhead + '	echo "Please check the ' + proc + ' process and retry the patch later."\n'
 	lines += lhead + '	exit 25\n'
 	lines += lhead + 'fi\n\n'
@@ -135,11 +141,11 @@ class Service( BaseObject ):
 		self.processList = None
 		self.check = None
 
-	def add_process( self, process ):
+	def add_process( self, process, isKeyword ):
 		if self.processList is None:
 			self.processList = list()
 
-		self.processList.append( process )
+		self.processList.append( (process, isKeyword) )
 
 	def init_config( self, parent ):
 		if self.name is None:
@@ -195,8 +201,8 @@ class Service( BaseObject ):
 			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
 			fout.write( lines )
 			ihead += '\t'
-		for proc in self.processList:
-			gen_check_proc_started( fout, ihead, proc, self.name )
+		for (proc, isKeyword) in self.processList:
+			gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
 
 		if self.check:
 			lines = lhead + 'fi\n'
@@ -205,8 +211,8 @@ class Service( BaseObject ):
 	def gen_check_stopped( self, fout, lhead ):
 		if not self.processList:
 			return
-		for proc in self.processList:
-			gen_check_proc_stopped( fout, lhead, proc, self.name )
+		for (proc, isKeyword) in self.processList:
+			gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
 
 
 class Process( BaseObject ):
@@ -241,10 +247,10 @@ class Process( BaseObject ):
 		fout.write( lines )
 
 	def gen_check_started( self, fout, lhead ):
-		gen_check_proc_started( fout, lhead, self.name )
+		gen_check_proc_started( fout, lhead, self.name, False )
 
 	def gen_check_stopped( self, fout, lhead ):
-		gen_check_proc_stopped( fout, lhead, self.name )
+		gen_check_proc_stopped( fout, lhead, self.name, False )
 
 
 class ServiceBlock( BaseObject ):

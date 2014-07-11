@@ -1,0 +1,39 @@
+<patch>
+	<!--* if set reload and reload is true, it will warn reloadign before patch and will reload after patch -->
+	<reload>true</reload>
+	<!--* if set the warn message, it will give the warning before patch and ask for y/n, if select n, the script will abort -->
+	<warn>check if old patch applied</warn>
+	<component>
+		<!--* the component name, it wil be used as the component directory name-->
+		<name>ContentMgr</name>
+		<device>se</device>
+		<services>
+			<!--* how long will it need wait for after stopping/starting all the services, in seconds-->
+			<waitTime>1</waitTime>
+			<service>
+				<!--* the service needs to be stopped before patch by nodemgr,-->
+				<!--	and sometimes, you need point out the processes that need to-->
+				<!--	be checked to make sure the service is really stopped or started successfully-->
+				<name>contentmgr</name>
+				<!--check if the process is alive or not, it will use pidof to check it-->
+				<process>ContentMgr</process>
+				<!--check if the process is alive or not, it will use grep to check it-->
+				<!--processgrep>ContentMgr</processgrep-->
+			</service>
+		</services>
+		<bins>
+			<bin>
+				<!--* where you put your binary files-->
+				<!--* if it's a directory, the tool will consider all files under this directory-->
+				<!--	as the src files; and also you can set a single normal file path here-->
+				<src>/sw/unicorn/bin/ContentMgr</src>
+				<!--* where you patch your src files to-->
+				<!--* you must set a directory here, if you want to set a file path here, please-->
+				<!--	use the "dstfile" element instead-->
+				<!--* if you didn't add this element, by default, it will use '/sw/unicorn/bin'-->
+				<!--	as the dst directory-->
+				<dst>/sw/unicorn/bin</dst>
+			</bin>
+		</bins>
+	</component>
+</patch>

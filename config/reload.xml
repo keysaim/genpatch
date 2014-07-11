@@ -1,27 +1,9 @@
 <patch>
 	<reload>true</reload>
-	<warn>continue?</warn>
+	<warn>test waring</warn>
 	<component>
 		<!--* the component name, it wil be used as the component directory name-->
 		<name>service-router</name>
-		<services>
-			<!--* how long will it need wait for after stopping/starting all the services, in seconds-->
-			<waitTime>20</waitTime>
-			<service>
-				<!--* the service needs to be stopped before patch by nodemgr,-->
-				<!--	and sometimes, you need point out the processes that need to-->
-				<!--	be checked to make sure the service is really stopped or started successfully-->
-				<name>fmsserver</name>
-				<!--the process needs be checked, it will use pidof to check it-->
-				<process>fmsedge</process>
-			</service>
-			<service>
-				<!--same as above-->
-				<name>sr</name>
-				<!--the process needs be checked to see if it's stopped/started-->
-				<process>service_router</process>
-			</service>
-		</services>
 		<bins>
 			<bin>
 				<!--* where you put your binary files-->
@@ -36,14 +18,5 @@
 				<dst>/sw/unicorn/bin</dst>
 			</bin>
 		</bins>
-		<libs>
-			<lib>
-				<!--* single normal file path-->
-				<src>/ws/nbaoping/ads312b60/spcdn/derived/unicorn/lib/libSRClient.so</src>
-				<!--* if you want to set a normal file as the dst, you must use the dstfile element-->
-				<!--* if you don't set any dst/dstfile element, it always use the /sw/unicorn/lib by default-->
-				<dstfile>/sw/unicorn/lib/libSRClient.so</dstfile>
-			</lib>
-		</libs>
 	</component>
 </patch>

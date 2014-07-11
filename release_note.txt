@@ -5,9 +5,13 @@ Features:
 	when set the reload element, it will give a reload warning before patch. And will do reload after patch
 2. add warn support
 	when set the warning, it will give a warning before patch, if select no, patch will abort
+3. add 'processgrep' element to check processes alive
+	it will use grep to check
 
 Bugs:
 1. patch verify failed when some src file is substring of other src file
+2. check process alive fails when the process is substring of the component name
+	use pidof instead
 
 
 ------------------------------------------------------------------------------------------
