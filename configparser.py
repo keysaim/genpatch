@@ -2,6 +2,7 @@ import logging
 
 from base import *
 from patcher import *
+from tooler import *
 
 
 class ConfigParser( BaseObject ):
@@ -19,8 +20,42 @@ class ConfigParser( BaseObject ):
 				patcher = self.__parse_patch( cnode )
 				if patcher is not None:
 					patcherList.append( patcher )
+			elif name == 'tool':
+				tool = self.__parse_tool( cnode )
+				if tool:
+					patcherList.append( tool )
 
 		return patcherList
+
+	def __parse_tool( self, node ):
+		logging.debug( 'parse tool element...' )
+		tool = Tooler()
+		for cnode in node.childNodes:
+			name = cnode.nodeName
+			if name == 'name':
+				tool.name = get_node_value(cnode)
+			elif name == 'device':
+				tool.deviceList = self.__parse_device( get_node_value(cnode) )
+			elif name == 'script':
+				tool.script = ToolFile( get_node_value(cnode) )
+				logging.debug( 'parsed script file:'+str(tool.script) )
+			elif name == 'files':
+				tool.fileBlock = self.__parse_file_block( cnode, node )
+
+		return tool
+	
+	def __parse_file_block( self, node, parent ):
+		fileBlock = ToolFileBlock()
+
+		for cnode in node.childNodes:
+			name = cnode.nodeName
+			if name == 'src':
+				tfile = ToolFile( get_node_value(cnode) )
+				logging.debug( 'parsed one file:'+str(tfile) )
+				fileBlock.add_file( tfile )
+
+		logging.debug( 'parsed one file block:'+str(fileBlock) )
+		return fileBlock
 
 	def __parse_patch( self, node ):
 		logging.debug( 'parse patch element...' )
@@ -120,6 +155,18 @@ class ConfigParser( BaseObject ):
 		logging.debug( 'parsed one process:'+str(process) )
 		return process
 
+	def __parse_device( self, dvalue ):
+		dstr = dvalue.lower().strip()
+		deviceList = list()
+		for seg in dstr.split( ',' ):
+			de = seg.strip()
+			if de:
+				deviceList.append( de )
+		if not deviceList:
+			deviceList = None
+
+		return deviceList
+
 	def __parse_component( self, node, parent ):
 		comp = Component(parent)
 
@@ -128,15 +175,7 @@ class ConfigParser( BaseObject ):
 			if name == 'name':
 				comp.name = get_node_value( cnode )
 			elif name == 'device':
-				dstr = get_node_value( cnode ).lower().strip()
-				comp.deviceList = list()
-				for seg in dstr.split( ',' ):
-					de = seg.strip()
-					if de:
-						comp.deviceList.append( de )
-				if not comp.deviceList:
-					comp.deviceList = None
-
+				comp.deviceList = self.__parse_device( get_node_value(cnode) )
 			elif name == 'bins':
 				comp.binBlock = self.__parse_bins( cnode, comp )
 			elif name == 'libs':

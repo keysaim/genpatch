@@ -6,6 +6,59 @@ from base import *
 
 STRICT_PARSE = True
 
+def format_device_name( deviceList ):
+	if deviceList:
+		nlist = list()
+		for de in deviceList:
+			if de == 'se':
+				de = 'service-engine'
+			elif de == 'sr':
+				de = 'service-router'
+			elif de == 'cdsm':
+				de = 'content-delivery-system-manager'
+			nlist.append( de )
+			return nlist
+	
+	return None
+
+def gen_md5sum_value( spath ):
+	cmd = 'md5sum ' + spath
+	logging.debug( 'popen cmd:'+cmd )
+	fin = os.popen( cmd, 'r' )
+	md5sum = ''
+	for line in fin:
+		logging.debug( line )
+		segs = line.split()
+		md5sum = segs[0]
+		break
+	fin.close()
+	return md5sum
+
+def gen_check_version_func( fout ):
+	lines  = 'function check_version() {\n'
+	lines += '	local target_version="$1"\n'
+	lines += '	cds_version=$(/ruby/bin/exec -c "show version" | grep "Content Delivery System Software Release" | awk \'{ print $6$8 }\')\n'
+	lines += '	if [[ "$cds_version" = "$target_version" ]]; then\n'
+	lines += '		echo "Current cds-is version $cds_version"\n'
+	lines += '		return 0\n'
+	lines += '	else\n'
+	lines += '		echo "Patch is only applied to cds-is $target_version (but current is $cds_version), aborting."\n'
+	lines += '		return 23\n'
+	lines += '	fi\n'
+	lines += '}\n'
+	lines += '	\n'
+	fout.write( lines )
+
+def gen_mount_sw( fout, lhead, perm, sleepTime=10 ):
+	lines  = lhead + 'mount -n -o remount,' + perm + ' /sw\n'
+	lines += lhead + 'if [ $? -ne 0 ]; then\n'
+	lines += lhead + '	echo "ERROR: unable to remount partition as ' + perm + ' mode"\n'
+	lines += lhead + '	echo "Please try the patch later or reload the device and retry."\n'
+	lines += lhead + '	exit 28\n'
+	lines += lhead + 'fi\n'
+	lines += lhead + 'sleep ' + str(sleepTime) + '\n'
+	fout.write( lines )
+
 
 def __gen_stop_service_func( self, fout ):
 	lines = 'function stop_service(){\n'
@@ -53,18 +106,43 @@ def __gen_start_service_func( self, fout ):
 	fout.write( lines )
 
 def gen_check_device_mode_func( fout, lhead ):
-	lines  = lhead + 'check_device_mode() {\n'
+	lines  = lhead + 'function check_device_mode() {\n'
 	lines += lhead + '	local setMode="$1"\n'
 	lines += lhead + '    local device_mode=$(/ruby/bin/exec -c "show device-mode current" | grep mode | awk \'{ print $4 }\')\n'
 	lines += lhead + '    if [[ "$device_mode" = "$setMode" ]]; then\n'
 	lines += lhead + '        echo "Current device mode $device_mode"\n'
-	lines += lhead + '	   return 1	\n'
+	lines += lhead + '	  		return 1	\n'
 	lines += lhead + '    else\n'
 	lines += lhead + '        #echo "Patch is not allowed to install in $device_mode"\n'
 	lines += lhead + '        return 0\n'
 	lines += lhead + '    fi\n'
 	lines += lhead + '}\n'
 	
+	fout.write( lines )
+	
+def gen_check_device_mode( fout, lhead, deviceList ):
+	if not deviceList:
+		return
+	lines  = ''
+	lines += lhead + 'echo ""\n'
+	lines += lhead + 'local isRightMode=0\n'
+	lines += lhead + 'local allowMode=0\n'
+	lines += lhead + 'echo "checking device mode, allowed:' + str(deviceList) + '"\n'
+	for de in deviceList:
+		lines += lhead + 'if [ $isRightMode -eq 0 ]; then\n'
+		lines += lhead + '	check_device_mode "' + de + '"\n'
+		lines += lhead + '	isRightMode=$?\n'
+		lines += lhead + '	if [ $isRightMode -eq 1 ]; then\n'
+		lines += lhead + '		echo "patch will install for ' + de + '"\n'
+		lines += lhead + '		allowMode=1\n'
+		lines += lhead + '	fi\n'	
+		lines += lhead + 'fi\n'	
+
+	lines += lhead + 'if [ $allowMode -eq 0 ]; then\n'
+	lines += lhead + '	echo "patch is not allowed for this device mode"\n'
+	lines += lhead + '	/ruby/bin/exec -c "show device-mode current"\n'
+	lines += lhead + '	exit 44\n'
+	lines += lhead + 'fi\n'
 	fout.write( lines )
 	
 def gen_check_service_func( fout, lhead ):
@@ -583,6 +661,8 @@ class Component( BaseObject ):
 		self.md5File = None
 		self.scriptName = None
 
+		self.needReload = False
+
 	def init_config( self, parent ):
 		if self.name is None:
 			logging.error( 'component name not set:'+str(self) )
@@ -875,6 +955,11 @@ class Component( BaseObject ):
 		if not self.isInSW:
 			return
 
+		if perm == 'ro' and self.needReload:
+			#if needReload, no need to remount
+			logging.info( 'needReload, no need to remount in component:'+str(self) )
+			return
+
 		lines  = lhead + 'mount -n -o remount,' + perm + ' /sw\n'
 		lines += lhead + 'if [ $? -ne 0 ]; then\n'
 		lines += lhead + '	echo "ERROR: unable to remount partition as ' + perm + ' mode"\n'
@@ -988,6 +1073,7 @@ class Patcher( BaseObject ):
 		clist = list()
 		for comp in self.compList:
 			if comp.init_config( self ):
+				comp.needReload = self.needReload
 				clist.append( comp )
 				logging.debug( 'inited one component:'+str(comp) )
 			else:

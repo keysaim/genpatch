@@ -1,0 +1,8 @@
+<tool>
+	<name>auto-stat-profile</name>
+	<device>se</device>
+	<script>/home/neil/cdsis/tools/sampler/tool/sampler.sh</script>
+	<files>
+		<src>/home/neil/cdsis/tools/sampler/tool</src>
+	</files>
+</tool>
