@@ -2,6 +2,7 @@ import os
 import shutil
 import logging
 import traceback
+import re
 
 from base import *
 from patcher import *
@@ -12,10 +13,82 @@ class ToolFile( BaseObject ):
 		self.src = src
 
 
+class FileIgnore( BaseObject ):
+	def __init__( self ):
+		super( FileIgnore, self ).__init__()
+		self.ignoreList = list()
+	
+	def check_ignore( self, name ):
+		for ignore in self.ignoreList:
+			if ignore.match( name ):
+				logging.info( 'ignore file:'+name+' with pattern:'+str(ignore) )
+				return True
+
+		return False
+
+	def add_ignore( self, ignore ):
+		try:
+			ig = re.compile( ignore )
+			self.ignoreList.append( ig )
+			logging.info( 'add one ignore:'+ignore+', with re:'+str(ig) )
+			return True
+		except Exception, e:
+			logging.error( 'add ignore:'+ignore+' failed in:'+str(self) )
+			traceback.print_exc()
+			logging.error( str(e) )
+			return False
+
+
+class ToolDir( BaseObject ):
+	def __init__( self, srcDir ):
+		super( ToolDir, self ).__init__()
+		self.srcDir = srcDir
+		self.fileList = None
+		self.ignore = None
+	
+	def init_config( self, parent ):
+		if not self.srcDir:
+			logging.error( 'srcDir none error' )
+			return False
+		
+		if not os.path.isdir(self.srcDir):
+			logging.error( 'is not a directory:'+str(self) )
+			return False
+
+		fileList = self.__get_file_list()
+		if not fileList:
+			logging.error( 'no file in srcDir:'+self.srcDir )
+			return False
+
+		self.fileList = fileList
+		return True
+
+	def __get_file_list( self ):
+		fileList = list()
+		self.__walk_file_list( fileList, self.srcDir, '' )
+
+		return fileList
+
+	def __walk_file_list( self, fileList, curDir, relDir ):
+		for fname in os.listdir(curDir):
+			relPath = os.path.join( relDir, fname )
+			fpath = os.path.join( curDir, fname )
+			if self.ignore:
+				if self.ignore.check_ignore( fname ):
+					continue
+			if not os.path.isdir( fpath ):
+				logging.debug( 'add src file:'+fpath+', curDir:'+curDir+', relDir:'+relDir+' ' )
+				fileList.append( relPath )
+			else:
+				self.__walk_file_list( fileList, fpath, relPath )
+
+
+
 class ToolFileBlock( BaseObject ):
 	def __init__( self ):
 		super(ToolFileBlock, self).__init__()
 		self.fileList = list()
+		self.ignore = None
 
 	def add_file( self, tfile ):
 		self.fileList.append( tfile )
@@ -40,10 +113,16 @@ class ToolFileBlock( BaseObject ):
 		src = tfile.src
 		if os.path.exists(src):
 			if os.path.isfile(src):
+				if self.ignore:
+					if self.ignore.check_ignore(src):
+						return None
 				return [tfile]
 
 			flist = list()
 			for fname in os.listdir(src):
+				if self.ignore:
+					if self.ignore.check_ignore(fname):
+						continue
 				fpath = os.path.join(src, fname)
 				nfile = ToolFile( fpath )
 				flist.append( nfile )
@@ -69,6 +148,7 @@ class Tooler( BaseObject ):
 		self.deviceList = None
 		self.script = None
 		self.fileBlock = None
+		self.srcDir = None
 
 	def init_config( self ):
 		if not self.name:
@@ -88,6 +168,14 @@ class Tooler( BaseObject ):
 			if not self.deviceList:
 				logging.error( 'no valid device name defined in tool:'+str(self) )
 				return False
+
+		if self.srcDir:
+			if not self.srcDir.init_config( self ):
+				logging.error( 'init srcDir failed:'+str(self.srcDir) )
+				return False
+
+			if self.fileBlock:
+				logging.warn( '!!!!!!!srcDir configured, fileBlock will be skipped!!!!!!!!' )
 
 		if self.fileBlock:
 			if not self.fileBlock.init_config( self ):
@@ -199,11 +287,18 @@ class Tooler( BaseObject ):
 		lines += 'arguments="$@"\n'
 		
 		idx = 1
-		lines += self.__get_gen_md5sum_code( self.script.src, idx )
-		if self.fileBlock:
+		relSrc = os.path.basename( self.script.src )
+		lines += self.__get_gen_md5sum_code( self.script.src, relSrc, idx )
+		if self.srcDir:
+			for src in self.srcDir.fileList:
+				idx += 1
+				srcPath = os.path.join( self.srcDir.srcDir, src )
+				lines += self.__get_gen_md5sum_code( srcPath, src, idx )
+		elif self.fileBlock:
 			for tfile in self.fileBlock.fileList:
 				idx += 1
-				lines += self.__get_gen_md5sum_code( tfile.src, idx )
+				relSrc = os.path.basename( tfile.src )
+				lines += self.__get_gen_md5sum_code( tfile.src, relSrc, idx )
 		
 		lines += 'total_scripts=' + str(idx) + '\n'
 		lines += '\n\n'
@@ -384,8 +479,8 @@ class Tooler( BaseObject ):
 		opath = os.path.join( self.__get_tool_dir(), name )
 		return opath
 
-	def __get_gen_md5sum_code( self, src, idx ):
-		opath = os.path.join( self.packageDirName, os.path.basename(src) )
+	def __get_gen_md5sum_code( self, src, relSrc, idx ):
+		opath = os.path.join( self.packageDirName, relSrc )
 		md5sum = gen_md5sum_value( src )
 
 		lines  = 'script_file' + str(idx) + '="' + opath + '"\n'
@@ -404,15 +499,26 @@ class Tooler( BaseObject ):
 
 	def __copy_tool_files( self, dstDir ):
 		try:
-			if self.fileBlock:
-				for tfile in self.fileBlock.fileList:
+			fileList = None
+			if self.srcDir:
+				fileList = self.srcDir.fileList
+				for fname in fileList:
+					fsrc = os.path.join( self.srcDir.srcDir, fname )
+					fdst = os.path.join( dstDir, fname )
+					parent = os.path.dirname( fdst )
+					mkdir( parent )
+					shutil.copy( fsrc, fdst )
+			elif self.fileBlock:
+				fileList = self.fileBlock.fileList
+				for tfile in fileList:
 					shutil.copy( tfile.src, dstDir )
 					tfile.src = os.path.join( dstDir, os.path.basename(tfile.src) )
 
 			return True
-		except:
-			traceback.print_exc()
+		except Exception, e:
 			logging.error( 'copy tool files failed in:'+str(self) )
+			traceback.print_exc()
+			logging.error( str(e) )
 			return False
 
 

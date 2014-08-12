@@ -1,8 +1,16 @@
 <tool>
 	<name>auto-stat-profile</name>
 	<device>se</device>
-	<script>/home/neil/cdsis/tools/sampler/tool/sampler.sh</script>
+	<script>/home/neil/cdsis/tools/sampler/sampler.sh</script>
 	<files>
-		<src>/home/neil/cdsis/tools/sampler/tool</src>
+		<src>/home/neil/cdsis/tools/genpatch/genpatch.py</src>
+		<src>/home/neil/cdsis/tools/sampler/cfgparser.py</src>
+		<src>/home/neil/cdsis/tools/sampler/cfgparser.pyc</src>
+		<ignore>\.git</ignore>
+		<ignore>\.gitignore</ignore>
+		<ignore>.*\.pyc</ignore>
+		<ignore>.*\.tgz</ignore>
+		<ignore>.*\.gz</ignore>
+		<ignore>sampler</ignore>
 	</files>
 </tool>

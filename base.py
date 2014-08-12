@@ -19,13 +19,36 @@ import recipe
 NEW_VERSION = True
 
 RES_DIR = 'output'
+FILE_HANDLER = None
 
 LOGGING_FORMAT = '%(asctime)s %(levelname)5s: %(filename)s:%(lineno)s[%(funcName)s]-> %(message)s'
 __TIME_FMT = '%Y/%m/%d-%H:%M:%S'
 __START_TIME = datetime( 1970, 1, 1 )
 
 def init_logging( level=logging.INFO ):
-	logging.basicConfig( level=level, format=LOGGING_FORMAT )
+	#logging.basicConfig( level=level, format=LOGGING_FORMAT )
+	logName = None
+	global FILE_HANDLER
+	logger = logging.getLogger()
+	logger.setLevel( level )
+	formatter = logging.Formatter( LOGGING_FORMAT )
+
+	for handler in logger.handlers:
+		logger.removeHandler( handler )
+
+	handler = logging.StreamHandler( sys.stdout )
+	handler.setFormatter( formatter )
+	logger.addHandler( handler )
+	if logName:
+		bdir = os.path.dirname(logName)
+		if os.path.exists(bdir):
+			if is_new_version():
+				handler = logging.handlers.RotatingFileHandler( logName, 'a', 1024*1024, 20 )
+			else:
+				handler = logging.FileHandler( logName )
+			handler.setFormatter( formatter )
+			logger.addHandler( handler )
+			FILE_HANDLER = handler
 
 def is_new_version( ):
 	return NEW_VERSION

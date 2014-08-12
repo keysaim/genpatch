@@ -40,22 +40,43 @@ class ConfigParser( BaseObject ):
 				tool.script = ToolFile( get_node_value(cnode) )
 				logging.debug( 'parsed script file:'+str(tool.script) )
 			elif name == 'files':
-				tool.fileBlock = self.__parse_file_block( cnode, node )
+				fileBlock = self.__parse_file_block( cnode, node )
+				if isinstance(fileBlock, ToolDir):
+					tool.srcDir = fileBlock
+				else:
+					tool.fileBlock = fileBlock
 
 		return tool
 	
 	def __parse_file_block( self, node, parent ):
 		fileBlock = ToolFileBlock()
+		srcDir = None
+		fignore = None
 
 		for cnode in node.childNodes:
 			name = cnode.nodeName
 			if name == 'src':
-				tfile = ToolFile( get_node_value(cnode) )
-				logging.debug( 'parsed one file:'+str(tfile) )
-				fileBlock.add_file( tfile )
+				fpath = get_node_value(cnode)
+				if os.path.isdir(fpath):
+					srcDir = ToolDir( fpath )
+					logging.info( 'parsed one ToolDir:'+fpath+', break' )
+				else:
+					tfile = ToolFile( fpath )
+					logging.debug( 'parsed one file:'+str(tfile) )
+					fileBlock.add_file( tfile )
+			elif name == 'ignore':
+				if fignore is None:
+					fignore = FileIgnore()
+				fignore.add_ignore( get_node_value(cnode) )
 
-		logging.debug( 'parsed one file block:'+str(fileBlock) )
-		return fileBlock
+		if srcDir:
+			logging.debug( 'parsed one tool dir:'+str(srcDir) )
+			srcDir.ignore = fignore
+			return srcDir
+		else:
+			logging.debug( 'parsed one file block:'+str(fileBlock) )
+			fileBlock.ignore = fignore
+			return fileBlock
 
 	def __parse_patch( self, node ):
 		logging.debug( 'parse patch element...' )
