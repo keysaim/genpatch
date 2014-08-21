@@ -219,11 +219,11 @@ class Service( BaseObject ):
 		self.processList = None
 		self.check = None
 
-	def add_process( self, process, isKeyword ):
+	def add_process( self, process, isKeyword, checkType ):
 		if self.processList is None:
 			self.processList = list()
 
-		self.processList.append( (process, isKeyword) )
+		self.processList.append( (process, isKeyword, checkType) )
 
 	def init_config( self, parent ):
 		if self.name is None:
@@ -279,8 +279,9 @@ class Service( BaseObject ):
 			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
 			fout.write( lines )
 			ihead += '\t'
-		for (proc, isKeyword) in self.processList:
-			gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
+		for (proc, isKeyword, checkType) in self.processList:
+			if checkType != 'stop':
+				gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
 
 		if self.check:
 			lines = lhead + 'fi\n'
@@ -289,8 +290,9 @@ class Service( BaseObject ):
 	def gen_check_stopped( self, fout, lhead ):
 		if not self.processList:
 			return
-		for (proc, isKeyword) in self.processList:
-			gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
+		for (proc, isKeyword, checkType) in self.processList:
+			if checkType != 'start':
+				gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
 
 
 class Process( BaseObject ):
@@ -518,6 +520,8 @@ class BinBlock( BaseObject ):
 			if bnry.itype:
 				#this is special binary, need special way to install it
 				self.specialList.append( bnry )
+				if bnry.itype == 'new':
+					continue
 
 			lines += lhead + 'source_file' + str(idx) + '="' + bnry.src + '"\n'
 			lines += lhead + 'target_file' + str(idx) + '="' + bnry.dst + '"\n'
@@ -525,7 +529,8 @@ class BinBlock( BaseObject ):
 			idx += 1
 
 		fout.write( lines )
-		return idx - offset
+		self.totalTargets = idx - offset
+		return self.totalTargets
 
 	def gen_special_apply( self, fout, lhead ):
 		if not self.specialList:
@@ -537,6 +542,9 @@ class BinBlock( BaseObject ):
 				lines += lhead + 'echo "applying kofile:' + bnry.src + '..."\n'
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.src, bnry.dst )
+			elif bnry.itype == 'new':
+				lines  = 'mv ' + bnry.src + ' ' + bnry.dst
+				fout.write( lines )
 
 	def gen_special_revert( self, fout, lhead ):
 		if not self.specialList:
@@ -548,6 +556,9 @@ class BinBlock( BaseObject ):
 				lines += lhead + 'echo "\nreverting kofile:' + bnry.src + '..."\n'
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.dst, bnry.dst )
+			elif bnry.itype == 'new':
+				lines  = 'rm -rf ' + bnry.dst
+				fout.write( lines )
 
 	def __gen_kodir( self, fout, lhead, dst ):
 		idx = dst.rfind( '/' )
@@ -611,7 +622,7 @@ class BinBlock( BaseObject ):
 		fout.write( lines )
 
 	def gen_sanity_check( self, fout, lhead ):
-		total = len(self.binList)
+		total = self.totalTargets
 		lines  = lhead + 'local bkupCount=0\n'
 		lines += lhead + 'for (( i=1; i <=' + len(total) + '; i++ ))\n'
 		lines += lhead + 'do\n'
@@ -631,7 +642,7 @@ class BinBlock( BaseObject ):
 		lines += lhead + '	echo "patch already exists, aborting."\n'
 		lines += lhead + '	return 21\n'
 		lines += lhead + 'fi\n'
-		
+
 		fout.write( lines )
 
 
