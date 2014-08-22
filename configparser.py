@@ -136,11 +136,11 @@ class ConfigParser( BaseObject ):
 				service.name = get_node_value( cnode )
 			elif name == 'process':
 				process = get_node_value( cnode )
-				check = get_attr_value( 'check' )
+				check = get_attr_value( cnode, 'check' )
 				service.add_process( process, False, check )
 			elif name == 'processgrep':
 				process = get_node_value( cnode )
-				check = get_attr_value( 'check' )
+				check = get_attr_value( cnode, 'check' )
 				service.add_process( process, True, check )
 			elif name == 'check':
 				service.check = self.__parse_svc_check( cnode, node )

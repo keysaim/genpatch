@@ -270,7 +270,7 @@ class Service( BaseObject ):
 		lines += lhead + '/ruby/bin/nodemgr_clt stop ' + self.name + '\n'
 		fout.write( lines )
 
-	def gen_check_started( self, fout, lhead ):
+	def gen_check_started( self, fout, lhead, cmdType ):
 		if not self.processList:
 			return
 		
@@ -279,19 +279,26 @@ class Service( BaseObject ):
 			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
 			fout.write( lines )
 			ihead += '\t'
+
+		checkCmd = 'apply'
+		if cmdType == 'apply':
+			checkCmd = 'revert'
 		for (proc, isKeyword, checkType) in self.processList:
-			if checkType != 'stop':
+			if checkType.find('stop') < 0 and checkType.find(checkCmd) < 0:
 				gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
 
 		if self.check:
 			lines = lhead + 'fi\n'
 			fout.write( lines )
 
-	def gen_check_stopped( self, fout, lhead ):
+	def gen_check_stopped( self, fout, lhead, cmdType ):
 		if not self.processList:
 			return
+		checkCmd = 'apply'
+		if cmdType == 'apply':
+			checkCmd = 'revert'
 		for (proc, isKeyword, checkType) in self.processList:
-			if checkType != 'start':
+			if checkType.find('start') < 0 and checkType.find(checkCmd) < 0:
 				gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
 
 
@@ -361,7 +368,7 @@ class ServiceBlock( BaseObject ):
 		self.services = slist
 		return len(self.services) > 0
 
-	def gen_start( self, fout, lhead ):
+	def gen_start( self, fout, lhead, cmdType ):
 		lines = lhead + 'echo "try starting services..."\n'
 		fout.write( lines )
 		idx = len(self.services) - 1
@@ -380,9 +387,9 @@ class ServiceBlock( BaseObject ):
 		while idx >= 0:
 			(service, isSer) = self.services[idx]
 			idx -= 1
-			service.gen_check_started( fout, lhead )
+			service.gen_check_started( fout, lhead, cmdType )
 	
-	def gen_stop( self, fout, lhead ):
+	def gen_stop( self, fout, lhead, cmdType ):
 		for (service, isSer) in self.services:
 			service.gen_check_service( fout, lhead )
 
@@ -398,7 +405,7 @@ class ServiceBlock( BaseObject ):
 		fout.write( lines )
 
 		for (service, isSer) in self.services:
-			service.gen_check_stopped( fout, lhead )
+			service.gen_check_stopped( fout, lhead, cmdType )
 
 
 class Binary( BaseObject ):
@@ -543,7 +550,7 @@ class BinBlock( BaseObject ):
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.src, bnry.dst )
 			elif bnry.itype == 'new':
-				lines  = 'mv ' + bnry.src + ' ' + bnry.dst
+				lines  = lhead + 'mv ' + bnry.src + ' ' + bnry.dst + '\n'
 				fout.write( lines )
 
 	def gen_special_revert( self, fout, lhead ):
@@ -557,7 +564,7 @@ class BinBlock( BaseObject ):
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.dst, bnry.dst )
 			elif bnry.itype == 'new':
-				lines  = 'rm -rf ' + bnry.dst
+				lines  = lhead + 'rm -rf ' + bnry.dst + '\n'
 				fout.write( lines )
 
 	def __gen_kodir( self, fout, lhead, dst ):
@@ -809,7 +816,7 @@ class Component( BaseObject ):
 		self.__gen_check_md5sum( fout, lhead )
 		if self.serviceBlock:
 			fout.write( '\n' )
-			self.serviceBlock.gen_stop( fout, lhead )
+			self.serviceBlock.gen_stop( fout, lhead, 'apply' )
 		else:
 			logging.info( 'no service block to stop' )
 		self.__gen_mount( fout, lhead, 'rw' )
@@ -817,7 +824,7 @@ class Component( BaseObject ):
 		self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			fout.write( '\n' )
-			self.serviceBlock.gen_start( fout, lhead )
+			self.serviceBlock.gen_start( fout, lhead, 'apply' )
 		else:
 			logging.info( 'no service block to start' )
 
@@ -835,12 +842,12 @@ class Component( BaseObject ):
 		lhead = '\t'
 		self.__gen_check_reverted( fout, lhead )
 		if self.serviceBlock:
-			self.serviceBlock.gen_stop( fout, lhead )
+			self.serviceBlock.gen_stop( fout, lhead, 'revert' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_revert_bin( fout, lhead )
 		self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
-			self.serviceBlock.gen_start( fout, lhead )
+			self.serviceBlock.gen_start( fout, lhead, 'revert' )
 
 		lines  = ''
 		lines += '}\n'
