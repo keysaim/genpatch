@@ -219,11 +219,11 @@ class Service( BaseObject ):
 		self.processList = None
 		self.check = None
 
-	def add_process( self, process, isKeyword ):
+	def add_process( self, process, isKeyword, checkType ):
 		if self.processList is None:
 			self.processList = list()
 
-		self.processList.append( (process, isKeyword) )
+		self.processList.append( (process, isKeyword, checkType) )
 
 	def init_config( self, parent ):
 		if self.name is None:
@@ -270,7 +270,7 @@ class Service( BaseObject ):
 		lines += lhead + '/ruby/bin/nodemgr_clt stop ' + self.name + '\n'
 		fout.write( lines )
 
-	def gen_check_started( self, fout, lhead ):
+	def gen_check_started( self, fout, lhead, cmdType ):
 		if not self.processList:
 			return
 		
@@ -279,18 +279,27 @@ class Service( BaseObject ):
 			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
 			fout.write( lines )
 			ihead += '\t'
-		for (proc, isKeyword) in self.processList:
-			gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
+
+		checkCmd = 'apply'
+		if cmdType == 'apply':
+			checkCmd = 'revert'
+		for (proc, isKeyword, checkType) in self.processList:
+			if checkType.find('stop') < 0 and checkType.find(checkCmd) < 0:
+				gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
 
 		if self.check:
 			lines = lhead + 'fi\n'
 			fout.write( lines )
 
-	def gen_check_stopped( self, fout, lhead ):
+	def gen_check_stopped( self, fout, lhead, cmdType ):
 		if not self.processList:
 			return
-		for (proc, isKeyword) in self.processList:
-			gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
+		checkCmd = 'apply'
+		if cmdType == 'apply':
+			checkCmd = 'revert'
+		for (proc, isKeyword, checkType) in self.processList:
+			if checkType.find('start') < 0 and checkType.find(checkCmd) < 0:
+				gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
 
 
 class Process( BaseObject ):
@@ -359,7 +368,7 @@ class ServiceBlock( BaseObject ):
 		self.services = slist
 		return len(self.services) > 0
 
-	def gen_start( self, fout, lhead ):
+	def gen_start( self, fout, lhead, cmdType ):
 		lines = lhead + 'echo "try starting services..."\n'
 		fout.write( lines )
 		idx = len(self.services) - 1
@@ -378,9 +387,9 @@ class ServiceBlock( BaseObject ):
 		while idx >= 0:
 			(service, isSer) = self.services[idx]
 			idx -= 1
-			service.gen_check_started( fout, lhead )
+			service.gen_check_started( fout, lhead, cmdType )
 	
-	def gen_stop( self, fout, lhead ):
+	def gen_stop( self, fout, lhead, cmdType ):
 		for (service, isSer) in self.services:
 			service.gen_check_service( fout, lhead )
 
@@ -396,7 +405,7 @@ class ServiceBlock( BaseObject ):
 		fout.write( lines )
 
 		for (service, isSer) in self.services:
-			service.gen_check_stopped( fout, lhead )
+			service.gen_check_stopped( fout, lhead, cmdType )
 
 
 class Binary( BaseObject ):
@@ -518,6 +527,8 @@ class BinBlock( BaseObject ):
 			if bnry.itype:
 				#this is special binary, need special way to install it
 				self.specialList.append( bnry )
+				if bnry.itype == 'new':
+					continue
 
 			lines += lhead + 'source_file' + str(idx) + '="' + bnry.src + '"\n'
 			lines += lhead + 'target_file' + str(idx) + '="' + bnry.dst + '"\n'
@@ -525,7 +536,8 @@ class BinBlock( BaseObject ):
 			idx += 1
 
 		fout.write( lines )
-		return idx - offset
+		self.totalTargets = idx - offset
+		return self.totalTargets
 
 	def gen_special_apply( self, fout, lhead ):
 		if not self.specialList:
@@ -537,6 +549,9 @@ class BinBlock( BaseObject ):
 				lines += lhead + 'echo "applying kofile:' + bnry.src + '..."\n'
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.src, bnry.dst )
+			elif bnry.itype == 'new':
+				lines  = lhead + 'mv ' + bnry.src + ' ' + bnry.dst + '\n'
+				fout.write( lines )
 
 	def gen_special_revert( self, fout, lhead ):
 		if not self.specialList:
@@ -548,6 +563,9 @@ class BinBlock( BaseObject ):
 				lines += lhead + 'echo "\nreverting kofile:' + bnry.src + '..."\n'
 				fout.write( lines )
 				self.__gen_kofile( fout, lhead, bnry.dst, bnry.dst )
+			elif bnry.itype == 'new':
+				lines  = lhead + 'rm -rf ' + bnry.dst + '\n'
+				fout.write( lines )
 
 	def __gen_kodir( self, fout, lhead, dst ):
 		idx = dst.rfind( '/' )
@@ -611,7 +629,7 @@ class BinBlock( BaseObject ):
 		fout.write( lines )
 
 	def gen_sanity_check( self, fout, lhead ):
-		total = len(self.binList)
+		total = self.totalTargets
 		lines  = lhead + 'local bkupCount=0\n'
 		lines += lhead + 'for (( i=1; i <=' + len(total) + '; i++ ))\n'
 		lines += lhead + 'do\n'
@@ -631,7 +649,7 @@ class BinBlock( BaseObject ):
 		lines += lhead + '	echo "patch already exists, aborting."\n'
 		lines += lhead + '	return 21\n'
 		lines += lhead + 'fi\n'
-		
+
 		fout.write( lines )
 
 
@@ -799,7 +817,7 @@ class Component( BaseObject ):
 		self.__gen_check_md5sum( fout, lhead )
 		if self.serviceBlock:
 			fout.write( '\n' )
-			self.serviceBlock.gen_stop( fout, lhead )
+			self.serviceBlock.gen_stop( fout, lhead, 'apply' )
 		else:
 			logging.info( 'no service block to stop' )
 		self.__gen_mount( fout, lhead, 'rw' )
@@ -808,7 +826,7 @@ class Component( BaseObject ):
 			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			fout.write( '\n' )
-			self.serviceBlock.gen_start( fout, lhead )
+			self.serviceBlock.gen_start( fout, lhead, 'apply' )
 		else:
 			logging.info( 'no service block to start' )
 
@@ -826,13 +844,13 @@ class Component( BaseObject ):
 		lhead = '\t'
 		self.__gen_check_reverted( fout, lhead )
 		if self.serviceBlock:
-			self.serviceBlock.gen_stop( fout, lhead )
+			self.serviceBlock.gen_stop( fout, lhead, 'revert' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_revert_bin( fout, lhead )
 		if self.skipMount:
 			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
-			self.serviceBlock.gen_start( fout, lhead )
+			self.serviceBlock.gen_start( fout, lhead, 'revert' )
 
 		lines  = ''
 		lines += '}\n'

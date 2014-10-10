@@ -1,0 +1,58 @@
+<patch>
+	<component>
+		<!--* the component name, it wil be used as the component directory name-->
+		<name>SRKA</name>
+		<services>
+			<!--* how long will it need wait for after stopping/starting all the services, in seconds-->
+			<waitTime>10</waitTime>
+			<service>
+				<!--* the service needs to be stopped before patch by nodemgr,-->
+				<!--	and sometimes, you need point out the processes that need to-->
+				<!--	be checked to make sure the service is really stopped or started successfully-->
+				<name>srka</name>
+				<!--the process needs be checked, it will use pidof to check it-->
+				<processgrep check="stop apply">srka-start.pl</processgrep>
+				<process check="start apply">srka</process>
+				<processgrep check="start revert">srka-start.pl</processgrep>
+				<process check="stop revert">srka</process>
+			</service>
+			<service>
+				<!--same as above-->
+				<name>srscr</name>
+				<!--the process needs be checked to see if it's stopped/started-->
+				<processgrep check="stop apply">srscr-start.pl</processgrep>
+				<process check="start apply">srscr</process>
+				<processgrep check="start revert">srscr-start.pl</processgrep>
+				<process check="stop revert">srscr</process>
+			</service>
+		</services>
+		<bins>
+			<bin>
+				<!--* where you put your binary files-->
+				<!--* if it's a directory, the tool will consider all files under this directory-->
+				<!--	as the src files; and also you can set a single normal file path here-->
+                                <src>/local/local1/Workspace/unicorn/bin</src>
+				<!--* where you patch your src files to-->
+				<!--* you must set a directory here, if you want to set a file path here, please-->
+				<!--	use the "dstfile" element instead-->
+				<!--* if you didn't add this element, by default, it will use '/sw/unicorn/bin'-->
+				<!--	as the dst directory-->
+				<dst>/sw/unicorn/bin</dst>
+			</bin>
+			<bin>
+				<src>/local/local1/Workspace/unicorn/new/srscr</src>
+				<dstfile>/sw/unicorn/bin/srscr</dstfile>
+				<type>new</type>
+			</bin>
+		</bins>
+		<libs>
+			<lib>
+				<!--* single normal file path-->
+                                <src>/local/local1/Workspace/unicorn/lib/libKAL2.so</src>
+				<!--* if you want to set a normal file as the dst, you must use the dstfile element-->
+				<!--* if you don't set any dst/dstfile element, it always use the /sw/unicorn/lib by default-->
+				<dstfile>/sw/unicorn/lib/libKAL2.so</dstfile>
+			</lib>
+		</libs>
+	</component>
+</patch>
