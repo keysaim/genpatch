@@ -27,13 +27,7 @@
 				<!--* where you put your binary files-->
 				<!--* if it's a directory, the tool will consider all files under this directory-->
 				<!--	as the src files; and also you can set a single normal file path here-->
-				<src>/sw/unicorn/bin/ContentMgr</src>
-				<!--* where you patch your src files to-->
-				<!--* you must set a directory here, if you want to set a file path here, please-->
-				<!--	use the "dstfile" element instead-->
-				<!--* if you didn't add this element, by default, it will use '/sw/unicorn/bin'-->
-				<!--	as the dst directory-->
-				<dst>/sw/unicorn/bin</dst>
+				<src>./base.py</src>
 			</bin>
 		</bins>
 	</component>

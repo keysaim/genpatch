@@ -654,6 +654,7 @@ class Component( BaseObject ):
 		self.binBlock = None
 		self.libBlock = None
 		self.isInSW = False
+		self.skipMount = False
 
 		self.deviceMode = None
 		self.compDir = None
@@ -803,7 +804,8 @@ class Component( BaseObject ):
 			logging.info( 'no service block to stop' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_install_bin( fout, lhead )
-		self.__gen_mount( fout, lhead, 'ro' )
+		if self.skipMount:
+			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			fout.write( '\n' )
 			self.serviceBlock.gen_start( fout, lhead )
@@ -827,7 +829,8 @@ class Component( BaseObject ):
 			self.serviceBlock.gen_stop( fout, lhead )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_revert_bin( fout, lhead )
-		self.__gen_mount( fout, lhead, 'ro' )
+		if self.skipMount:
+			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			self.serviceBlock.gen_start( fout, lhead )
 

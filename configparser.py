@@ -195,6 +195,10 @@ class ConfigParser( BaseObject ):
 			name = cnode.nodeName
 			if name == 'name':
 				comp.name = get_node_value( cnode )
+			elif name == 'skipMount':
+				nval = get_node_value( cnode )
+				if nval == 'true':
+					comp.skipMount = True
 			elif name == 'device':
 				comp.deviceList = self.__parse_device( get_node_value(cnode) )
 			elif name == 'bins':
