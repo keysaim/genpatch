@@ -822,7 +822,7 @@ class Component( BaseObject ):
 			logging.info( 'no service block to stop' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_install_bin( fout, lhead )
-		if self.skipMount:
+		if not self.skipMount:
 			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			fout.write( '\n' )
@@ -847,7 +847,7 @@ class Component( BaseObject ):
 			self.serviceBlock.gen_stop( fout, lhead, 'revert' )
 		self.__gen_mount( fout, lhead, 'rw' )
 		self.__gen_revert_bin( fout, lhead )
-		if self.skipMount:
+		if not self.skipMount:
 			self.__gen_mount( fout, lhead, 'ro' )
 		if self.serviceBlock:
 			self.serviceBlock.gen_start( fout, lhead, 'revert' )
