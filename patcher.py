@@ -238,6 +238,8 @@ class Service( BaseObject ):
 			lines += lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
 			lines += lhead + 'echo "starting service:' + self.name + '..."\n'
 			lines += lhead + '	/ruby/bin/nodemgr_clt start ' + self.name + '\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "' + self.name + ' is disabled, no need to start"\n'
 			lines += lhead + 'fi\n'
 		else:
 			lines += lhead + 'echo "starting service:' + self.name + '..."\n'
@@ -288,7 +290,9 @@ class Service( BaseObject ):
 				gen_check_proc_started( fout, ihead, proc, isKeyword, self.name )
 
 		if self.check:
-			lines = lhead + 'fi\n'
+			lines  = lhead + 'else\n'
+			lines += lhead + '	echo "' + self.name + ' is disabled, no need to check"\n'
+			lines += lhead + 'fi\n'
 			fout.write( lines )
 
 	def gen_check_stopped( self, fout, lhead, cmdType ):
@@ -302,9 +306,10 @@ class Service( BaseObject ):
 				gen_check_proc_stopped( fout, lhead, proc, isKeyword, self.name )
 
 
-class Process( BaseObject ):
+class Process( Service ):
 	def __init__( self, parent ):
-		self.name = None
+		super(Process, self).__init__( parent )
+		#self.name = None
 		self.startCmd = None
 		self.stopCmd = None
 
@@ -323,20 +328,39 @@ class Process( BaseObject ):
 		return True
 
 	def gen_start( self, fout, lhead ):
-		lines  = lhead + self.startCmd + '\n'
+		lines = ''
+		if self.check:
+			lines += lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
+			lines += lhead + '	echo "starting process:' + self.name + '..."\n'
+			lines += lhead + '\t' + self.startCmd + '\n'
+			lines += lhead + 'else\n'
+			lines += lhead + '	echo "' + self.name + ' is disabled, no need to start"\n'
+			lines += lhead + 'fi\n'
+		else:
+			lines += lhead + 'echo "starting process:' + self.name + '..."\n'
+			lines += lhead + self.startCmd + '\n'
 		fout.write( lines )
-
-	def gen_check_service( self, fout, lhead ):
-		pass
 
 	def gen_stop( self, fout, lhead ):
 		lines  = lhead + self.stopCmd + '\n'
 		fout.write( lines )
 
-	def gen_check_started( self, fout, lhead ):
-		gen_check_proc_started( fout, lhead, self.name, False )
+	def gen_check_started( self, fout, lhead, cmdType ):
+		ihead = lhead
+		if self.check:
+			lines = lhead + 'if [ $' + self.name + '_enable -eq 1 ]; then\n'
+			fout.write( lines )
+			ihead += '\t'
 
-	def gen_check_stopped( self, fout, lhead ):
+		gen_check_proc_started( fout, ihead, self.name, False )
+
+		if self.check:
+			lines  = lhead + 'else\n'
+			lines += lhead + '	echo "' + self.name + ' is disabled, no need to check"\n'
+			lines += lhead + 'fi\n'
+			fout.write( lines )
+
+	def gen_check_stopped( self, fout, lhead, cmdType ):
 		gen_check_proc_stopped( fout, lhead, self.name, False )
 
 
@@ -1001,7 +1025,19 @@ class Component( BaseObject ):
 		lines += lhead + '	backup_file=${!backup_file}\n'
 		lines += lhead + '	source_file=${!source_file}\n'
 		lines += lhead + '	mv -f $target_file $backup_file\n'
+		lines += lhead + '	if [ $? -ne 0 ]; then\n'
+		lines += lhead + '		echo "fatal ERROR: unable to backup the file $backup_file"\n'
+		lines += lhead + '		echo "Please check the disk and revert the patch!"\n'
+		lines += lhead + '		echo "if reverting fails, you may need reload the device!"\n'
+		lines += lhead + '		exit 48\n'
+		lines += lhead + '	fi\n'
 		lines += lhead + '	cp -f $source_file $target_file\n'
+		lines += lhead + '	if [ $? -ne 0 ]; then\n'
+		lines += lhead + '		echo "fatal ERROR: unable to install file $target_file"\n'
+		lines += lhead + '		echo "Please check the disk and revert the patch!"\n'
+		lines += lhead + '		echo "if reverting fails, you may need reload the device!"\n'
+		lines += lhead + '		exit 48\n'
+		lines += lhead + '	fi\n'
 		lines += lhead + '	chmod a+x $target_file\n'
 		lines += lhead + 'done\n'
 		fout.write( lines )
@@ -1027,6 +1063,10 @@ class Component( BaseObject ):
 		lines += lhead + '	source_file=${!source_file}\n'
 		lines += lhead + '	rm -f $target_file\n'
 		lines += lhead + '	mv -f $backup_file $target_file\n'
+		lines += lhead + '	if [ $? -ne 0 ]; then\n'
+		lines += lhead + '		echo "ERROR: unable to revert the file $backup_file"\n'
+		lines += lhead + '		echo "Please check the disk and try again"\n'
+		lines += lhead + '	fi\n'
 		lines += lhead + '	chmod a+x $target_file\n'
 		lines += lhead + 'done\n'
 		fout.write( lines )

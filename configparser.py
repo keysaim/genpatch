@@ -174,6 +174,8 @@ class ConfigParser( BaseObject ):
 				process.startCmd = get_node_value( cnode )
 			elif name == 'stop':
 				process.stopCmd = get_node_value( cnode )
+			elif name == 'check':
+				process.check = self.__parse_svc_check( cnode, node )
 
 		logging.debug( 'parsed one process:'+str(process) )
 		return process
